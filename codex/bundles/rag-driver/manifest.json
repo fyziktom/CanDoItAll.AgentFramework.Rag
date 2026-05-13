@@ -1,0 +1,32 @@
+{
+  "bundleKey": "rag-driver-2026-05-13",
+  "title": "CanDoItAll RAG Driver",
+  "date": "2026-05-13",
+  "profile": "initiative",
+  "targetSolution": "CanDoItAll.AgentFramework.Rag.slnx",
+  "targetProjects": [
+    "src/CanDoItAll.AgentFramework.Rag.Driver/CanDoItAll.AgentFramework.Rag.Driver.csproj",
+    "src/CanDoItAll.AgentFramework.Rag.Qdrant/CanDoItAll.AgentFramework.Rag.Qdrant.csproj",
+    "src/CanDoItAll.AgentFramework.Rag.Sample/CanDoItAll.AgentFramework.Rag.Sample.csproj",
+    "tests/CanDoItAll.AgentFramework.Rag.Tests/CanDoItAll.AgentFramework.Rag.Tests.csproj"
+  ],
+  "sourceEvidence": [
+    "C:/repositories/CanDoItAll.AgentFramework.SemanticCompletion",
+    "C:/repositories/qdrant-dotnet",
+    "C:/repositories/CanDoItAll.AgentFramework.Rag/codex/skills/qdrant-clients-sdk/SKILL.md"
+  ],
+  "hardConstraints": [
+    "Standalone solution only.",
+    "Use Qdrant.Client as a NuGet package.",
+    "Keep generic RAG contracts provider-neutral.",
+    "Keep embeddings provider-driven and injectable.",
+    "No mandatory cloud, Ollama, or model-file dependency in tests."
+  ],
+  "acceptanceGates": [
+    "Standalone solution builds.",
+    "Unit tests pass.",
+    "Qdrant project compiles with NuGet package reference.",
+    "Sample console project compiles.",
+    "Bundle completed-stage validator passes."
+  ]
+}
