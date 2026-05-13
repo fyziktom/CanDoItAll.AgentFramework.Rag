@@ -9,6 +9,7 @@ This solution keeps vector database drivers outside the main CanDoItAll solution
 - `src/CanDoItAll.AgentFramework.Rag.Driver` - provider-neutral RAG contracts, knowledge/search models, factory, and embedding abstractions.
 - `src/CanDoItAll.AgentFramework.Rag.Qdrant` - Qdrant implementation using the `Qdrant.Client` NuGet package.
 - `src/CanDoItAll.AgentFramework.Rag.Sample` - console sample that configures the factory, stores knowledge, and searches it.
+- `src/CanDoItAll.AgentFramework.Rag.Sandbox` - Blazor SSR sandbox using CanDoItAll BaseLib components for collection and record CRUD/search.
 - `tests/CanDoItAll.AgentFramework.Rag.Tests` - xUnit tests for contracts, embeddings, factory behavior, and Qdrant mapping.
 
 ## Core Shape
@@ -87,6 +88,22 @@ dotnet run --project src/CanDoItAll.AgentFramework.Rag.Sample
 ```
 
 The sample uses local deterministic embeddings, ensures the collection, upserts two knowledge entries, and searches by query text.
+
+## Blazor Sandbox
+
+Run the interactive SSR sandbox:
+
+```powershell
+dotnet run --project src/CanDoItAll.AgentFramework.Rag.Sandbox --urls http://localhost:5046
+```
+
+Open `http://localhost:5046`.
+
+The sandbox uses BaseLib components and a session-scoped in-memory store over the RAG models. It supports:
+
+- Add, update, delete, and search collection definitions.
+- Add, update, delete, and vector-search records in the selected collection.
+- Local deterministic embeddings, so Qdrant, OpenAI, Ollama, and model files are not required for the UI demo.
 
 ## Validation
 

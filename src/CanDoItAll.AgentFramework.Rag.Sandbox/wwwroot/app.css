@@ -1,0 +1,27 @@
+html,
+body {
+    min-height: 100%;
+    background: #f8fafc;
+    color: #0f172a;
+}
+
+h1:focus {
+    outline: none;
+}
+
+.rag-muted {
+    color: #64748b;
+    font-size: .85rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.blazor-error-boundary {
+    background: #991b1b;
+    color: white;
+    padding: 1rem;
+}
+
+.blazor-error-boundary::after {
+    content: "An error has occurred.";
+}

@@ -3,6 +3,7 @@
     <Project Path="src/CanDoItAll.AgentFramework.Rag.Driver/CanDoItAll.AgentFramework.Rag.Driver.csproj" />
     <Project Path="src/CanDoItAll.AgentFramework.Rag.Qdrant/CanDoItAll.AgentFramework.Rag.Qdrant.csproj" />
     <Project Path="src/CanDoItAll.AgentFramework.Rag.Sample/CanDoItAll.AgentFramework.Rag.Sample.csproj" />
+    <Project Path="src/CanDoItAll.AgentFramework.Rag.Sandbox/CanDoItAll.AgentFramework.Rag.Sandbox.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/CanDoItAll.AgentFramework.Rag.Tests/CanDoItAll.AgentFramework.Rag.Tests.csproj" />

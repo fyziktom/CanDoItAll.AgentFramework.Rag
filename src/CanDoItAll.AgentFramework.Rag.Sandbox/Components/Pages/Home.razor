@@ -1,0 +1,413 @@
+@page "/"
+@inject RagSandboxStore Store
+
+<PageTitle>RAG Sandbox</PageTitle>
+
+<PageScaffold Mode="PageScaffoldMode.FocusWorkbench">
+    <Header>
+        <PageHeader Eyebrow="Agent Framework"
+                    Title="RAG sandbox"
+                    Description="Collections, knowledge records, and vector search in one Blazor SSR workbench.">
+            <Actions>
+                <Button Text="New collection" Icon="add" ButtonStyle="ButtonStyle.Light" Click="NewCollection" />
+                <Button Text="@CollectionSaveText" Icon="save" Click="SaveCollectionAsync" />
+            </Actions>
+        </PageHeader>
+    </Header>
+
+    <ChildContent>
+        <SummaryTiles ColumnsSm="2" ColumnsXl="4">
+            <SummaryTile Label="Collections" Value="@CollectionCount" HelperText="Visible collection definitions." Tone="info" />
+            <SummaryTile Label="Records" Value="@TotalRecordCount" HelperText="Knowledge entries across collections." Tone="success" />
+            <SummaryTile Label="Selected" Value="@SelectedCollectionLabel" HelperText="Active collection for record operations." />
+            <SummaryTile Label="Last action" Value="@lastAction" HelperText="@lastActionDetail" Tone="@LastActionTone" />
+        </SummaryTiles>
+
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <Alert AlertStyle="AlertStyle.Danger">
+                <strong>Action failed.</strong> @errorMessage
+            </Alert>
+        }
+
+        <Grid Gap="LayoutGap.XXLarge" ColumnsXl="2">
+            <SectionCard Title="Collections" Description="Collection registry and vector settings.">
+                <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+                    <FormField Text="Search collections">
+                        <TextBox Immediate="true" Placeholder="Name or description" @bind-Value="collectionSearch" />
+                    </FormField>
+
+                    <DataGrid TItem="RagSandboxCollectionSummary"
+                              Data="@FilteredCollections"
+                              AllowPaging="true"
+                              PageSize="6">
+                        <Columns>
+                            <DataGridColumn TItem="RagSandboxCollectionSummary" Title="Collection">
+                                <Template Context="collection">
+                                    <Stack GapScale="LayoutGap.Tiny">
+                                        <strong>@collection.Name</strong>
+                                        <span class="rag-muted">@collection.Description</span>
+                                    </Stack>
+                                </Template>
+                            </DataGridColumn>
+                            <DataGridColumn TItem="RagSandboxCollectionSummary" Title="Vectors">
+                                <Template Context="collection">
+                                    <Stack GapScale="LayoutGap.Tiny">
+                                        <StatusBadge Text="@($"{collection.VectorSize} dimensions")" Tone="info" />
+                                        <span class="rag-muted">@collection.Distance</span>
+                                    </Stack>
+                                </Template>
+                            </DataGridColumn>
+                            <DataGridColumn TItem="RagSandboxCollectionSummary" Title="Records" Property="RecordCount" />
+                            <DataGridColumn TItem="RagSandboxCollectionSummary" Title="Actions">
+                                <Template Context="collection">
+                                    <Stack Orientation="Orientation.Horizontal" GapScale="LayoutGap.Small" Wrap="FlexWrap.Wrap">
+                                        <Button Text="Edit" Icon="edit" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(() => SelectCollection(collection))" />
+                                        <Button Text="Delete" Icon="delete" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Outlined" Click="@(() => DeleteCollection(collection.Name))" />
+                                    </Stack>
+                                </Template>
+                            </DataGridColumn>
+                        </Columns>
+                    </DataGrid>
+                </Stack>
+            </SectionCard>
+
+            <SectionCard Title="@CollectionEditorTitle" Description="Add or update the selected collection.">
+                <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+                    <FormRow Split="true">
+                        <FormField Text="Collection name">
+                            <TextBox Immediate="true" Placeholder="finance-policies" @bind-Value="collectionName" />
+                        </FormField>
+                        <FormField Text="Vector size">
+                            <TextBox Immediate="true" Placeholder="64" @bind-Value="collectionVectorSize" />
+                        </FormField>
+                    </FormRow>
+
+                    <FormField Text="Distance metric">
+                        <DropDown TValue="RagDistanceMetric" Data="@distanceOptions" @bind-Value="collectionDistance" />
+                    </FormField>
+
+                    <FormField Text="Description">
+                        <TextArea Rows="4" Immediate="true" Placeholder="Operational knowledge for retrieval." @bind-Value="collectionDescription" />
+                    </FormField>
+
+                    <Stack Orientation="Orientation.Horizontal" GapScale="LayoutGap.Small" Wrap="FlexWrap.Wrap">
+                        <Button Text="@CollectionSaveText" Icon="save" Click="SaveCollectionAsync" />
+                        <Button Text="Reset" Icon="refresh" ButtonStyle="ButtonStyle.Light" Click="NewCollection" />
+                        <Button Text="Delete selected" Icon="delete" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Outlined" Disabled="@(!HasSelectedCollection)" Click="@(() => DeleteCollection(selectedCollectionName))" />
+                    </Stack>
+                </Stack>
+            </SectionCard>
+        </Grid>
+
+        <Grid Gap="LayoutGap.XXLarge" ColumnsXl="2">
+            <SectionCard Title="Records" Description="@RecordsPanelDescription">
+                @if (!HasSelectedCollection)
+                {
+                    <EmptyState Eyebrow="Records"
+                                Title="No collection selected"
+                                Description="Select or create a collection before editing records." />
+                }
+                else
+                {
+                    <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+                        <FormField Text="Search records">
+                            <TextBox Immediate="true" Placeholder="approval, payment, Qdrant..." @bind-Value="recordSearch" />
+                        </FormField>
+
+                        <Stack Orientation="Orientation.Horizontal" GapScale="LayoutGap.Small" Wrap="FlexWrap.Wrap">
+                            <Button Text="Search" Icon="search" Click="SearchRecordsAsync" />
+                            <Button Text="Show all" Icon="list" ButtonStyle="ButtonStyle.Light" Click="ShowAllRecords" />
+                            <Button Text="New record" Icon="add" ButtonStyle="ButtonStyle.Light" Click="NewRecord" />
+                        </Stack>
+
+                        <DataGrid TItem="RagSandboxRecordSummary"
+                                  Data="@recordResults"
+                                  AllowPaging="true"
+                                  PageSize="6">
+                            <Columns>
+                                <DataGridColumn TItem="RagSandboxRecordSummary" Title="Record">
+                                    <Template Context="record">
+                                        <Stack GapScale="LayoutGap.Tiny">
+                                            <strong>@record.Id</strong>
+                                            <span class="rag-muted">@record.Text</span>
+                                        </Stack>
+                                    </Template>
+                                </DataGridColumn>
+                                <DataGridColumn TItem="RagSandboxRecordSummary" Title="Metadata" Property="Metadata" />
+                                <DataGridColumn TItem="RagSandboxRecordSummary" Title="Match">
+                                    <Template Context="record">
+                                        <StatusBadge Text="@FormatScore(record.Score)" Tone="@ResolveScoreTone(record.Score)" />
+                                    </Template>
+                                </DataGridColumn>
+                                <DataGridColumn TItem="RagSandboxRecordSummary" Title="Actions">
+                                    <Template Context="record">
+                                        <Stack Orientation="Orientation.Horizontal" GapScale="LayoutGap.Small" Wrap="FlexWrap.Wrap">
+                                            <Button Text="Edit" Icon="edit" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(() => SelectRecord(record))" />
+                                            <Button Text="Delete" Icon="delete" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Outlined" Click="@(() => DeleteRecord(record.Id))" />
+                                        </Stack>
+                                    </Template>
+                                </DataGridColumn>
+                            </Columns>
+                        </DataGrid>
+                    </Stack>
+                }
+            </SectionCard>
+
+            <SectionCard Title="@RecordEditorTitle" Description="Add or update a knowledge record.">
+                @if (!HasSelectedCollection)
+                {
+                    <EmptyState Eyebrow="Editor"
+                                Title="Record editor unavailable"
+                                Description="A selected collection is required before records can be saved." />
+                }
+                else
+                {
+                    <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+                        <FormField Text="Record id">
+                            <TextBox Immediate="true" Placeholder="invoice-approval" @bind-Value="recordId" />
+                        </FormField>
+
+                        <FormField Text="Knowledge text">
+                            <TextArea Rows="6" Immediate="true" Placeholder="Knowledge content to embed and retrieve." @bind-Value="recordText" />
+                        </FormField>
+
+                        <FormField Text="Metadata">
+                            <TextBox Immediate="true" Placeholder="source=policy; owner=team" @bind-Value="recordMetadata" />
+                        </FormField>
+
+                        <Stack Orientation="Orientation.Horizontal" GapScale="LayoutGap.Small" Wrap="FlexWrap.Wrap">
+                            <Button Text="@RecordSaveText" Icon="save" Click="SaveRecordAsync" />
+                            <Button Text="Reset" Icon="refresh" ButtonStyle="ButtonStyle.Light" Click="NewRecord" />
+                            <Button Text="Delete selected" Icon="delete" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Outlined" Disabled="@(!HasSelectedRecord)" Click="@(() => DeleteRecord(selectedRecordId))" />
+                        </Stack>
+                    </Stack>
+                }
+            </SectionCard>
+        </Grid>
+    </ChildContent>
+</PageScaffold>
+
+@code {
+    private readonly RagDistanceMetric[] distanceOptions = Enum.GetValues<RagDistanceMetric>();
+    private string? selectedCollectionName;
+    private string? selectedRecordId;
+    private string? errorMessage;
+    private string lastAction = "Ready";
+    private string lastActionDetail = "No mutations in this session.";
+
+    private string? collectionSearch;
+    private string collectionName = string.Empty;
+    private string collectionDescription = string.Empty;
+    private string collectionVectorSize = "64";
+    private RagDistanceMetric collectionDistance = RagDistanceMetric.Cosine;
+
+    private string? recordSearch;
+    private string recordId = string.Empty;
+    private string recordText = string.Empty;
+    private string recordMetadata = string.Empty;
+    private IReadOnlyList<RagSandboxRecordSummary> recordResults = [];
+
+    private IReadOnlyList<RagSandboxCollectionSummary> FilteredCollections => Store.SearchCollections(collectionSearch);
+    private string CollectionCount => FilteredCollections.Count.ToString();
+    private string TotalRecordCount => Store.SearchCollections(null).Sum(collection => collection.RecordCount).ToString();
+    private bool HasSelectedCollection => !string.IsNullOrWhiteSpace(selectedCollectionName);
+    private bool HasSelectedRecord => !string.IsNullOrWhiteSpace(selectedRecordId);
+    private string SelectedCollectionLabel => selectedCollectionName ?? "None";
+    private string LastActionTone => errorMessage is null ? "success" : "danger";
+    private string CollectionSaveText => HasSelectedCollection && string.Equals(selectedCollectionName, collectionName, StringComparison.OrdinalIgnoreCase) ? "Update collection" : "Add collection";
+    private string CollectionEditorTitle => HasSelectedCollection ? "Collection editor" : "New collection";
+    private string RecordsPanelDescription => HasSelectedCollection ? $"Search and manage records in {selectedCollectionName}." : "Select a collection to view records.";
+    private string RecordEditorTitle => HasSelectedRecord ? "Record editor" : "New record";
+    private string RecordSaveText => HasSelectedRecord && string.Equals(selectedRecordId, recordId, StringComparison.OrdinalIgnoreCase) ? "Update record" : "Add record";
+
+    protected override void OnInitialized()
+    {
+        var first = Store.SearchCollections(null).FirstOrDefault();
+        if (first is not null)
+        {
+            SelectCollection(first);
+        }
+    }
+
+    private void NewCollection()
+    {
+        selectedCollectionName = null;
+        collectionName = string.Empty;
+        collectionDescription = string.Empty;
+        collectionVectorSize = "64";
+        collectionDistance = RagDistanceMetric.Cosine;
+        NewRecord();
+    }
+
+    private void SelectCollection(RagSandboxCollectionSummary collection)
+    {
+        selectedCollectionName = collection.Name;
+        collectionName = collection.Name;
+        collectionDescription = collection.Description;
+        collectionVectorSize = collection.VectorSize.ToString();
+        collectionDistance = collection.Distance;
+        selectedRecordId = null;
+        NewRecord();
+        ShowAllRecords();
+    }
+
+    private async Task SaveCollectionAsync()
+    {
+        await RunActionAsync(async () =>
+        {
+            var summary = await Store.SaveCollectionAsync(new RagSandboxCollectionEditModel
+            {
+                Name = collectionName,
+                Description = collectionDescription,
+                VectorSize = ParseVectorSize(),
+                Distance = collectionDistance
+            });
+
+            SelectCollection(summary);
+            lastAction = "Collection saved";
+            lastActionDetail = summary.Name;
+        });
+    }
+
+    private void DeleteCollection(string? collection)
+    {
+        if (string.IsNullOrWhiteSpace(collection))
+        {
+            return;
+        }
+
+        errorMessage = null;
+        if (Store.DeleteCollection(collection))
+        {
+            collectionSearch = null;
+            lastAction = "Collection deleted";
+            lastActionDetail = collection;
+            var next = Store.SearchCollections(null).FirstOrDefault();
+            if (next is null)
+            {
+                NewCollection();
+                recordResults = [];
+            }
+            else
+            {
+                SelectCollection(next);
+            }
+        }
+    }
+
+    private void NewRecord()
+    {
+        selectedRecordId = null;
+        recordId = string.Empty;
+        recordText = string.Empty;
+        recordMetadata = string.Empty;
+    }
+
+    private void SelectRecord(RagSandboxRecordSummary record)
+    {
+        selectedRecordId = record.Id;
+        recordId = record.Id;
+        recordText = record.Text;
+        recordMetadata = record.Metadata;
+    }
+
+    private async Task SaveRecordAsync()
+    {
+        if (selectedCollectionName is null)
+        {
+            return;
+        }
+
+        await RunActionAsync(async () =>
+        {
+            var record = await Store.SaveRecordAsync(selectedCollectionName, new RagSandboxRecordEditModel
+            {
+                Id = recordId,
+                Text = recordText,
+                Metadata = recordMetadata
+            });
+
+            SelectRecord(record);
+            await SearchRecordsAsync();
+            lastAction = "Record saved";
+            lastActionDetail = record.Id;
+        });
+    }
+
+    private void DeleteRecord(string? id)
+    {
+        if (selectedCollectionName is null || string.IsNullOrWhiteSpace(id))
+        {
+            return;
+        }
+
+        errorMessage = null;
+        if (Store.DeleteRecord(selectedCollectionName, id))
+        {
+            lastAction = "Record deleted";
+            lastActionDetail = id;
+            NewRecord();
+            ShowAllRecords();
+        }
+    }
+
+    private async Task SearchRecordsAsync()
+    {
+        if (selectedCollectionName is null)
+        {
+            return;
+        }
+
+        recordResults = await Store.SearchRecordsAsync(selectedCollectionName, recordSearch, 25);
+    }
+
+    private void ShowAllRecords()
+    {
+        if (selectedCollectionName is null)
+        {
+            recordResults = [];
+            return;
+        }
+
+        recordResults = Store.GetRecords(selectedCollectionName);
+    }
+
+    private async Task RunActionAsync(Func<Task> action)
+    {
+        errorMessage = null;
+        try
+        {
+            await action();
+        }
+        catch (Exception exception)
+        {
+            errorMessage = exception.Message;
+            lastAction = "Failed";
+            lastActionDetail = exception.Message;
+        }
+    }
+
+    private int ParseVectorSize()
+    {
+        if (int.TryParse(collectionVectorSize, out var vectorSize) && vectorSize > 0)
+        {
+            return vectorSize;
+        }
+
+        throw new InvalidOperationException("Vector size must be a positive whole number.");
+    }
+
+    private static string FormatScore(double? score)
+        => score is null ? "Stored" : score.Value.ToString("0.000");
+
+    private static string ResolveScoreTone(double? score)
+    {
+        if (score is null)
+        {
+            return "info";
+        }
+
+        return score >= 0.5 ? "success" : "warning";
+    }
+}
