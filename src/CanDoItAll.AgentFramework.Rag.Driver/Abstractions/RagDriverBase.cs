@@ -10,7 +10,8 @@ public abstract class RagDriverBase : IRagDriver
     protected RagDriverBase(
         string providerName,
         RagCollectionOptions defaultCollection,
-        IRagEmbeddingGenerator embeddingGenerator)
+        IRagEmbeddingGenerator embeddingGenerator,
+        RagDriverCapabilities? capabilities = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(providerName);
         ArgumentNullException.ThrowIfNull(defaultCollection);
@@ -19,10 +20,13 @@ public abstract class RagDriverBase : IRagDriver
         defaultCollection.Validate();
         ProviderName = providerName;
         DefaultCollection = defaultCollection;
+        Capabilities = capabilities ?? RagDriverCapabilities.None;
         _embeddingGenerator = embeddingGenerator;
     }
 
     public string ProviderName { get; }
+
+    public RagDriverCapabilities Capabilities { get; }
 
     public RagCollectionOptions DefaultCollection { get; }
 
@@ -63,6 +67,7 @@ public abstract class RagDriverBase : IRagDriver
         ArgumentNullException.ThrowIfNull(collection);
 
         entry.Validate(collection.VectorSize);
+        EnsureTagsSupported(entry);
         if (entry.Vector is { Length: > 0 } vector)
         {
             return vector;
@@ -74,6 +79,19 @@ public abstract class RagDriverBase : IRagDriver
 
         RagVectorValidation.EnsureVectorSize(embedding.Vector, collection.VectorSize, nameof(embedding));
         return embedding.Vector;
+    }
+
+    protected void EnsureTagsSupported(RagKnowledgeEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        if (entry.Tags.Count == 0 || Capabilities.SupportsTags)
+        {
+            return;
+        }
+
+        throw new NotSupportedException(
+            $"RAG provider '{ProviderName}' does not support knowledge entry tags.");
     }
 
     protected async ValueTask<float[]> ResolveQueryVectorAsync(

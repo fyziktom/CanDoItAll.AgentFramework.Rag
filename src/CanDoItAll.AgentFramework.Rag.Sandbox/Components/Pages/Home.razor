@@ -7,189 +7,431 @@
     <Header>
         <PageHeader Eyebrow="Agent Framework"
                     Title="RAG sandbox"
-                    Description="Collections, knowledge records, and vector search in one Blazor SSR workbench.">
+                    Description="Collections, knowledge records, tags, and RAG-style similarity search in one Blazor SSR workbench.">
             <Actions>
-                <Button Text="New collection" Icon="add" ButtonStyle="ButtonStyle.Light" Click="NewCollection" />
-                <Button Text="@CollectionSaveText" Icon="save" Click="SaveCollectionAsync" />
+                <Button Text="New collection" Icon="add" ButtonStyle="ButtonStyle.Light" Click="OpenNewCollectionDialog" />
+                <Button Text="New record" Icon="note_add" Disabled="@(!HasSelectedCollection)" Click="OpenNewRecordDialog" />
             </Actions>
         </PageHeader>
     </Header>
 
     <ChildContent>
-        <SummaryTiles ColumnsSm="2" ColumnsXl="4">
-            <SummaryTile Label="Collections" Value="@CollectionCount" HelperText="Visible collection definitions." Tone="info" />
-            <SummaryTile Label="Records" Value="@TotalRecordCount" HelperText="Knowledge entries across collections." Tone="success" />
-            <SummaryTile Label="Selected" Value="@SelectedCollectionLabel" HelperText="Active collection for record operations." />
-            <SummaryTile Label="Last action" Value="@lastAction" HelperText="@lastActionDetail" Tone="@LastActionTone" />
-        </SummaryTiles>
+        <Stack GapScale="LayoutGap.Large" AlignItems="AlignItems.Stretch">
+            <Stack Orientation="Orientation.Horizontal"
+                   GapScale="LayoutGap.Small"
+                   Wrap="FlexWrap.Wrap">
+                <StatusBadge Text="@($"{CollectionCount} collections")" Tone="info" />
+                <StatusBadge Text="@($"{TotalRecordCount} records")" Tone="success" />
+                <StatusBadge Text="@($"Selected: {SelectedCollectionLabel}")" Tone="neutral" />
+                <StatusBadge Text="@lastAction" Tone="@LastActionTone" />
+                @if (!string.IsNullOrWhiteSpace(lastActionDetail))
+                {
+                    <StatusBadge Text="@lastActionDetail" Tone="info" />
+                }
+                <StatusBadge Text="Record tags supported" Tone="success" />
+            </Stack>
 
-        @if (!string.IsNullOrWhiteSpace(errorMessage))
-        {
-            <Alert AlertStyle="AlertStyle.Danger">
-                <strong>Action failed.</strong> @errorMessage
-            </Alert>
-        }
+            @if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                <Alert AlertStyle="AlertStyle.Danger">
+                    <strong>Action failed.</strong> @errorMessage
+                </Alert>
+            }
 
-        <Grid Gap="LayoutGap.XXLarge" ColumnsXl="2">
-            <SectionCard Title="Collections" Description="Collection registry and vector settings.">
-                <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
-                    <FormField Text="Search collections">
-                        <TextBox Immediate="true" Placeholder="Name or description" @bind-Value="collectionSearch" />
-                    </FormField>
+            <Tabs SelectedIndex="@selectedTabIndex"
+                  SelectedIndexChanged="HandleTabChangedAsync"
+                  AriaLabel="RAG sandbox management areas"
+                  OverflowMode="TabsOverflowMode.Wrap"
+                  data-testid="rag-workbench-tabs">
+                <TabItems>
+                    <TabsItem Text="Collections" BadgeText="@CollectionCount">
+                        <SectionCard Title="Collections" Description="Collection registry, vector settings, and collection tags.">
+                            <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+                                <Stack Orientation="Orientation.Horizontal"
+                                       GapScale="LayoutGap.Small"
+                                       AlignItems="AlignItems.End"
+                                       Wrap="FlexWrap.Wrap">
+                                    <FormField Text="Search collections">
+                                        <TextBox Immediate="true"
+                                                 Placeholder="Name, description, or tag"
+                                                 @bind-Value="collectionSearch"
+                                                 data-testid="collection-search" />
+                                    </FormField>
+                                    <Button Text="Add collection" Icon="add" Click="OpenNewCollectionDialog" data-testid="collection-add" />
+                                </Stack>
 
-                    <DataGrid TItem="RagSandboxCollectionSummary"
-                              Data="@FilteredCollections"
-                              AllowPaging="true"
-                              PageSize="6">
-                        <Columns>
-                            <DataGridColumn TItem="RagSandboxCollectionSummary" Title="Collection">
-                                <Template Context="collection">
-                                    <Stack GapScale="LayoutGap.Tiny">
-                                        <strong>@collection.Name</strong>
-                                        <span class="rag-muted">@collection.Description</span>
+                                <DataGrid TItem="RagSandboxCollectionSummary"
+                                          Data="@FilteredCollections"
+                                          AllowPaging="true"
+                                          PageSize="8"
+                                          Class="rag-data-grid"
+                                          data-testid="collection-grid">
+                                    <Columns>
+                                        <DataGridColumn TItem="RagSandboxCollectionSummary" Title="Collection">
+                                            <Template Context="collection">
+                                                <Stack GapScale="LayoutGap.Tiny">
+                                                    <strong>@collection.Name</strong>
+                                                    <span class="rag-muted">@collection.Description</span>
+                                                </Stack>
+                                            </Template>
+                                        </DataGridColumn>
+                                        <DataGridColumn TItem="RagSandboxCollectionSummary" Title="Tags">
+                                            <Template Context="collection">
+                                                @RenderTags(collection.Tags)
+                                            </Template>
+                                        </DataGridColumn>
+                                        <DataGridColumn TItem="RagSandboxCollectionSummary" Title="Vectors">
+                                            <Template Context="collection">
+                                                <Stack GapScale="LayoutGap.Tiny">
+                                                    <StatusBadge Text="@($"{collection.VectorSize} dimensions")" Tone="info" />
+                                                    <span class="rag-muted">@collection.Distance</span>
+                                                </Stack>
+                                            </Template>
+                                        </DataGridColumn>
+                                        <DataGridColumn TItem="RagSandboxCollectionSummary" Title="Records" Property="RecordCount" />
+                                        <DataGridColumn TItem="RagSandboxCollectionSummary" Title="Actions">
+                                            <Template Context="collection">
+                                                <Stack Orientation="Orientation.Horizontal" GapScale="LayoutGap.Small" Wrap="FlexWrap.Wrap">
+                                                    <Button Text="Records" Icon="list" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(() => OpenRecordsForCollection(collection))" />
+                                                    <Button Text="Edit" Icon="edit" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(() => OpenEditCollectionDialog(collection))" />
+                                                    <Button Text="Delete" Icon="delete" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Outlined" Click="@(() => DeleteCollection(collection.Name))" />
+                                                </Stack>
+                                            </Template>
+                                        </DataGridColumn>
+                                    </Columns>
+                                </DataGrid>
+                            </Stack>
+                        </SectionCard>
+                    </TabsItem>
+
+                    <TabsItem Text="Records" BadgeText="@TotalRecordCount">
+                        <Grid Gap="LayoutGap.Large" ColumnTemplateLg="16rem minmax(0,1fr)">
+                            <SectionCard Title="Collections" Description="Select the record workspace.">
+                                <Stack GapScale="LayoutGap.Small" AlignItems="AlignItems.Stretch" Class="rag-collection-rail">
+                                    @foreach (var collection in AllCollections)
+                                    {
+                                        var isActive = string.Equals(collection.Name, selectedCollectionName, StringComparison.OrdinalIgnoreCase);
+                                        <button type="button"
+                                                class="@ResolveRailItemClass(isActive)"
+                                                @onclick="@(() => SelectCollectionForRecords(collection.Name))"
+                                                data-testid="record-collection-rail-item">
+                                            <span class="rag-rail-item__name">@collection.Name</span>
+                                            <span class="rag-rail-item__meta">@collection.RecordCount records</span>
+                                        </button>
+                                    }
+                                </Stack>
+                            </SectionCard>
+
+                            <SectionCard Title="@RecordsPanelTitle" Description="@RecordsPanelDescription">
+                                @if (!HasSelectedCollection)
+                                {
+                                    <EmptyState Eyebrow="Records"
+                                                Title="No collection selected"
+                                                Description="Select or create a collection before editing records." />
+                                }
+                                else
+                                {
+                                    <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+                                        <Stack Orientation="Orientation.Horizontal"
+                                               GapScale="LayoutGap.Small"
+                                               AlignItems="AlignItems.End"
+                                               Wrap="FlexWrap.Wrap">
+                                            <FormField Text="Search records">
+                                                <TextBox Immediate="true"
+                                                         Placeholder="approval, payment, Qdrant..."
+                                                         @bind-Value="recordSearch"
+                                                         data-testid="record-search" />
+                                            </FormField>
+                                            <Button Text="Search" Icon="search" Click="SearchRecordsAsync" data-testid="record-search-button" />
+                                            <Button Text="Show all" Icon="list" ButtonStyle="ButtonStyle.Light" Click="ShowAllRecords" />
+                                            <Button Text="Add record" Icon="note_add" ButtonStyle="ButtonStyle.Light" Click="OpenNewRecordDialog" data-testid="record-add" />
+                                        </Stack>
+
+                                        <DataGrid TItem="RagSandboxRecordSummary"
+                                                  Data="@recordResults"
+                                                  AllowPaging="true"
+                                                  PageSize="8"
+                                                  Class="rag-data-grid"
+                                                  data-testid="record-grid">
+                                            <Columns>
+                                                <DataGridColumn TItem="RagSandboxRecordSummary" Title="Record">
+                                                    <Template Context="record">
+                                                        <Stack GapScale="LayoutGap.Tiny">
+                                                            <strong>@record.Id</strong>
+                                                            <span class="rag-muted">@record.Text</span>
+                                                        </Stack>
+                                                    </Template>
+                                                </DataGridColumn>
+                                                <DataGridColumn TItem="RagSandboxRecordSummary" Title="Tags">
+                                                    <Template Context="record">
+                                                        @RenderTags(record.Tags)
+                                                    </Template>
+                                                </DataGridColumn>
+                                                <DataGridColumn TItem="RagSandboxRecordSummary" Title="Metadata" Property="Metadata" />
+                                                <DataGridColumn TItem="RagSandboxRecordSummary" Title="Match">
+                                                    <Template Context="record">
+                                                        <span class="@ResolveScoreClass(record.Score)">@FormatScore(record.Score)</span>
+                                                    </Template>
+                                                </DataGridColumn>
+                                                <DataGridColumn TItem="RagSandboxRecordSummary" Title="Actions">
+                                                    <Template Context="record">
+                                                        <Stack Orientation="Orientation.Horizontal" GapScale="LayoutGap.Small" Wrap="FlexWrap.Wrap">
+                                                            <Button Text="Edit" Icon="edit" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(() => OpenEditRecordDialog(record))" />
+                                                            <Button Text="Delete" Icon="delete" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Outlined" Click="@(() => DeleteRecord(record.Id))" />
+                                                        </Stack>
+                                                    </Template>
+                                                </DataGridColumn>
+                                            </Columns>
+                                        </DataGrid>
                                     </Stack>
-                                </Template>
-                            </DataGridColumn>
-                            <DataGridColumn TItem="RagSandboxCollectionSummary" Title="Vectors">
-                                <Template Context="collection">
-                                    <Stack GapScale="LayoutGap.Tiny">
-                                        <StatusBadge Text="@($"{collection.VectorSize} dimensions")" Tone="info" />
-                                        <span class="rag-muted">@collection.Distance</span>
-                                    </Stack>
-                                </Template>
-                            </DataGridColumn>
-                            <DataGridColumn TItem="RagSandboxCollectionSummary" Title="Records" Property="RecordCount" />
-                            <DataGridColumn TItem="RagSandboxCollectionSummary" Title="Actions">
-                                <Template Context="collection">
+                                }
+                            </SectionCard>
+                        </Grid>
+                    </TabsItem>
+
+                    <TabsItem Text="Similarity search" BadgeText="@SimilarityCollectionBadge">
+                        <Grid Gap="LayoutGap.Large" ColumnTemplateLg="minmax(0,0.95fr) minmax(0,1.35fr)">
+                            <SectionCard Title="Search scope" Description="Pick the collections that participate in the RAG-style similarity query.">
+                                <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+                                    <FormField Text="Selected collections">
+                                        <TagEditor Value="@similarityCollections"
+                                                   ValueChanged="HandleSimilarityCollectionsChangedAsync"
+                                                   Suggestions="@AllCollectionNames"
+                                                   Placeholder="Add collection"
+                                                   MaxTags="12"
+                                                   TestId="similarity-collections"
+                                                   InputTestId="similarity-collections-input" />
+                                    </FormField>
+
                                     <Stack Orientation="Orientation.Horizontal" GapScale="LayoutGap.Small" Wrap="FlexWrap.Wrap">
-                                        <Button Text="Edit" Icon="edit" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(() => SelectCollection(collection))" />
-                                        <Button Text="Delete" Icon="delete" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Outlined" Click="@(() => DeleteCollection(collection.Name))" />
+                                        <Button Text="Add collections" Icon="add" Click="OpenCollectionPickerDialog" data-testid="similarity-open-picker" />
+                                        <Button Text="Clear" Icon="close" ButtonStyle="ButtonStyle.Light" Disabled="@(similarityCollections.Count == 0)" Click="ClearSimilarityCollections" />
                                     </Stack>
-                                </Template>
-                            </DataGridColumn>
-                        </Columns>
-                    </DataGrid>
-                </Stack>
-            </SectionCard>
 
-            <SectionCard Title="@CollectionEditorTitle" Description="Add or update the selected collection.">
-                <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
-                    <FormRow Split="true">
-                        <FormField Text="Collection name">
-                            <TextBox Immediate="true" Placeholder="finance-policies" @bind-Value="collectionName" />
-                        </FormField>
-                        <FormField Text="Vector size">
-                            <TextBox Immediate="true" Placeholder="64" @bind-Value="collectionVectorSize" />
-                        </FormField>
-                    </FormRow>
+                                    <FormField Text="Query">
+                                        <TextArea Rows="5"
+                                                  Immediate="true"
+                                                  Placeholder="What knowledge should be retrieved?"
+                                                  @bind-Value="similarityQuery"
+                                                  data-testid="similarity-query" />
+                                    </FormField>
 
-                    <FormField Text="Distance metric">
-                        <DropDown TValue="RagDistanceMetric" Data="@distanceOptions" @bind-Value="collectionDistance" />
-                    </FormField>
+                                    <FormField Text="Limit">
+                                        <TextBox Immediate="true" @bind-Value="similarityLimit" data-testid="similarity-limit" />
+                                    </FormField>
 
-                    <FormField Text="Description">
-                        <TextArea Rows="4" Immediate="true" Placeholder="Operational knowledge for retrieval." @bind-Value="collectionDescription" />
-                    </FormField>
+                                    <Button Text="Search similarities"
+                                            Icon="search"
+                                            Disabled="@(similarityCollections.Count == 0)"
+                                            Click="SearchSimilaritiesAsync"
+                                            data-testid="similarity-search-button" />
+                                </Stack>
+                            </SectionCard>
 
-                    <Stack Orientation="Orientation.Horizontal" GapScale="LayoutGap.Small" Wrap="FlexWrap.Wrap">
-                        <Button Text="@CollectionSaveText" Icon="save" Click="SaveCollectionAsync" />
-                        <Button Text="Reset" Icon="refresh" ButtonStyle="ButtonStyle.Light" Click="NewCollection" />
-                        <Button Text="Delete selected" Icon="delete" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Outlined" Disabled="@(!HasSelectedCollection)" Click="@(() => DeleteCollection(selectedCollectionName))" />
-                    </Stack>
-                </Stack>
-            </SectionCard>
-        </Grid>
-
-        <Grid Gap="LayoutGap.XXLarge" ColumnsXl="2">
-            <SectionCard Title="Records" Description="@RecordsPanelDescription">
-                @if (!HasSelectedCollection)
-                {
-                    <EmptyState Eyebrow="Records"
-                                Title="No collection selected"
-                                Description="Select or create a collection before editing records." />
-                }
-                else
-                {
-                    <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
-                        <FormField Text="Search records">
-                            <TextBox Immediate="true" Placeholder="approval, payment, Qdrant..." @bind-Value="recordSearch" />
-                        </FormField>
-
-                        <Stack Orientation="Orientation.Horizontal" GapScale="LayoutGap.Small" Wrap="FlexWrap.Wrap">
-                            <Button Text="Search" Icon="search" Click="SearchRecordsAsync" />
-                            <Button Text="Show all" Icon="list" ButtonStyle="ButtonStyle.Light" Click="ShowAllRecords" />
-                            <Button Text="New record" Icon="add" ButtonStyle="ButtonStyle.Light" Click="NewRecord" />
-                        </Stack>
-
-                        <DataGrid TItem="RagSandboxRecordSummary"
-                                  Data="@recordResults"
-                                  AllowPaging="true"
-                                  PageSize="6">
-                            <Columns>
-                                <DataGridColumn TItem="RagSandboxRecordSummary" Title="Record">
-                                    <Template Context="record">
-                                        <Stack GapScale="LayoutGap.Tiny">
-                                            <strong>@record.Id</strong>
-                                            <span class="rag-muted">@record.Text</span>
-                                        </Stack>
-                                    </Template>
-                                </DataGridColumn>
-                                <DataGridColumn TItem="RagSandboxRecordSummary" Title="Metadata" Property="Metadata" />
-                                <DataGridColumn TItem="RagSandboxRecordSummary" Title="Match">
-                                    <Template Context="record">
-                                        <StatusBadge Text="@FormatScore(record.Score)" Tone="@ResolveScoreTone(record.Score)" />
-                                    </Template>
-                                </DataGridColumn>
-                                <DataGridColumn TItem="RagSandboxRecordSummary" Title="Actions">
-                                    <Template Context="record">
-                                        <Stack Orientation="Orientation.Horizontal" GapScale="LayoutGap.Small" Wrap="FlexWrap.Wrap">
-                                            <Button Text="Edit" Icon="edit" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(() => SelectRecord(record))" />
-                                            <Button Text="Delete" Icon="delete" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Outlined" Click="@(() => DeleteRecord(record.Id))" />
-                                        </Stack>
-                                    </Template>
-                                </DataGridColumn>
-                            </Columns>
-                        </DataGrid>
-                    </Stack>
-                }
-            </SectionCard>
-
-            <SectionCard Title="@RecordEditorTitle" Description="Add or update a knowledge record.">
-                @if (!HasSelectedCollection)
-                {
-                    <EmptyState Eyebrow="Editor"
-                                Title="Record editor unavailable"
-                                Description="A selected collection is required before records can be saved." />
-                }
-                else
-                {
-                    <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
-                        <FormField Text="Record id">
-                            <TextBox Immediate="true" Placeholder="invoice-approval" @bind-Value="recordId" />
-                        </FormField>
-
-                        <FormField Text="Knowledge text">
-                            <TextArea Rows="6" Immediate="true" Placeholder="Knowledge content to embed and retrieve." @bind-Value="recordText" />
-                        </FormField>
-
-                        <FormField Text="Metadata">
-                            <TextBox Immediate="true" Placeholder="source=policy; owner=team" @bind-Value="recordMetadata" />
-                        </FormField>
-
-                        <Stack Orientation="Orientation.Horizontal" GapScale="LayoutGap.Small" Wrap="FlexWrap.Wrap">
-                            <Button Text="@RecordSaveText" Icon="save" Click="SaveRecordAsync" />
-                            <Button Text="Reset" Icon="refresh" ButtonStyle="ButtonStyle.Light" Click="NewRecord" />
-                            <Button Text="Delete selected" Icon="delete" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Outlined" Disabled="@(!HasSelectedRecord)" Click="@(() => DeleteRecord(selectedRecordId))" />
-                        </Stack>
-                    </Stack>
-                }
-            </SectionCard>
-        </Grid>
+                            <SectionCard Title="Similarity results" Description="Results are ranked across the selected collections.">
+                                @if (similarityResults.Count == 0)
+                                {
+                                    <EmptyState Eyebrow="Search"
+                                                Title="No similarity results"
+                                                Description="Choose collections and run a query to see ranked knowledge records." />
+                                }
+                                else
+                                {
+                                    <DataGrid TItem="RagSandboxSearchHit"
+                                              Data="@similarityResults"
+                                              AllowPaging="true"
+                                              PageSize="8"
+                                              Class="rag-data-grid"
+                                              data-testid="similarity-results">
+                                        <Columns>
+                                            <DataGridColumn TItem="RagSandboxSearchHit" Title="Collection">
+                                                <Template Context="hit">
+                                                    <Stack GapScale="LayoutGap.Tiny">
+                                                        <strong>@hit.CollectionName</strong>
+                                                        <span class="rag-muted">@hit.RecordId</span>
+                                                    </Stack>
+                                                </Template>
+                                            </DataGridColumn>
+                                            <DataGridColumn TItem="RagSandboxSearchHit" Title="Tags">
+                                                <Template Context="hit">
+                                                    @RenderTags(hit.Tags)
+                                                </Template>
+                                            </DataGridColumn>
+                                            <DataGridColumn TItem="RagSandboxSearchHit" Title="Text" Property="Text" />
+                                            <DataGridColumn TItem="RagSandboxSearchHit" Title="Score">
+                                                <Template Context="hit">
+                                                    <span class="@ResolveScoreClass(hit.Score)">@hit.Score.ToString("0.000")</span>
+                                                </Template>
+                                            </DataGridColumn>
+                                        </Columns>
+                                    </DataGrid>
+                                }
+                            </SectionCard>
+                        </Grid>
+                    </TabsItem>
+                </TabItems>
+            </Tabs>
+        </Stack>
     </ChildContent>
 </PageScaffold>
 
+<Dialog IsOpen="@isCollectionDialogOpen"
+        Title="@CollectionDialogTitle"
+        Subtitle="Collection settings and tags are used by the sandbox store and search scopes."
+        Size="ModalSize.Compact"
+        DenseChrome="true"
+        OnClose="CloseCollectionDialogAsync"
+        TestId="collection-dialog">
+    <ChildContent>
+        <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+            <FormRow Split="true">
+                <FormField Text="Collection name">
+                    <TextBox Immediate="true" Placeholder="finance-policies" @bind-Value="collectionName" data-testid="collection-name" />
+                </FormField>
+                <FormField Text="Vector size">
+                    <TextBox Immediate="true" Placeholder="64" @bind-Value="collectionVectorSize" data-testid="collection-vector-size" />
+                </FormField>
+            </FormRow>
+
+            <FormField Text="Distance metric">
+                <DropDown TValue="RagDistanceMetric" Data="@distanceOptions" @bind-Value="collectionDistance" data-testid="collection-distance" />
+            </FormField>
+
+            <FormField Text="Description">
+                <TextArea Rows="4" Immediate="true" Placeholder="Operational knowledge for retrieval." @bind-Value="collectionDescription" data-testid="collection-description" />
+            </FormField>
+
+            <FormField Text="Tags">
+                <TagEditor Value="@collectionTags"
+                           ValueChanged="@((IReadOnlyList<string> value) => collectionTags = value)"
+                           Suggestions="@CollectionTagSuggestions"
+                           Placeholder="Add collection tag"
+                           MaxTags="12"
+                           TestId="collection-tags"
+                           InputTestId="collection-tags-input" />
+            </FormField>
+        </Stack>
+    </ChildContent>
+    <Footer>
+        <Stack Orientation="Orientation.Horizontal"
+               GapScale="LayoutGap.Small"
+               JustifyContent="JustifyContent.End"
+               Wrap="FlexWrap.Wrap">
+            <Button Text="Cancel" Icon="close" ButtonStyle="ButtonStyle.Light" Click="CloseCollectionDialogAsync" />
+            <Button Text="@CollectionSaveText" Icon="save" Click="SaveCollectionAsync" data-testid="collection-save" />
+        </Stack>
+    </Footer>
+</Dialog>
+
+<Dialog IsOpen="@isRecordDialogOpen"
+        Title="@RecordDialogTitle"
+        Subtitle="@RecordDialogSubtitle"
+        Size="ModalSize.Compact"
+        DenseChrome="true"
+        OnClose="CloseRecordDialogAsync"
+        TestId="record-dialog">
+    <ChildContent>
+        @if (!HasSelectedCollection)
+        {
+            <EmptyState Eyebrow="Records"
+                        Title="No collection selected"
+                        Description="Select a collection before adding a record." />
+        }
+        else
+        {
+            <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+                <FormField Text="Record id">
+                    <TextBox Immediate="true" Placeholder="invoice-approval" @bind-Value="recordId" data-testid="record-id" />
+                </FormField>
+
+                <FormField Text="Knowledge text">
+                    <TextArea Rows="6" Immediate="true" Placeholder="Knowledge content to embed and retrieve." @bind-Value="recordText" data-testid="record-text" />
+                </FormField>
+
+                <FormField Text="Metadata">
+                    <TextBox Immediate="true" Placeholder="source=policy; owner=team" @bind-Value="recordMetadata" data-testid="record-metadata" />
+                </FormField>
+
+                <FormField Text="Tags">
+                    <TagEditor Value="@recordTags"
+                               ValueChanged="@((IReadOnlyList<string> value) => recordTags = value)"
+                               Suggestions="@RecordTagSuggestions"
+                               Placeholder="Add record tag"
+                               Disabled="@(!Store.SupportsRecordTags)"
+                               MaxTags="12"
+                               TestId="record-tags"
+                               InputTestId="record-tags-input" />
+                </FormField>
+            </Stack>
+        }
+    </ChildContent>
+    <Footer>
+        <Stack Orientation="Orientation.Horizontal"
+               GapScale="LayoutGap.Small"
+               JustifyContent="JustifyContent.End"
+               Wrap="FlexWrap.Wrap">
+            <Button Text="Cancel" Icon="close" ButtonStyle="ButtonStyle.Light" Click="CloseRecordDialogAsync" />
+            <Button Text="@RecordSaveText" Icon="save" Disabled="@(!HasSelectedCollection)" Click="SaveRecordAsync" data-testid="record-save" />
+        </Stack>
+    </Footer>
+</Dialog>
+
+<Dialog IsOpen="@isCollectionPickerOpen"
+        Title="Add search collections"
+        Subtitle="Double-click one collection to add it immediately, or select several and confirm."
+        Size="ModalSize.Compact"
+        DenseChrome="true"
+        OnClose="CloseCollectionPickerDialogAsync"
+        TestId="collection-picker-dialog">
+    <ChildContent>
+        <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+            <FormField Text="Filter collections">
+                <TextBox Immediate="true" Placeholder="Name, description, or tag" @bind-Value="pickerSearch" data-testid="collection-picker-search" />
+            </FormField>
+
+            <Stack GapScale="LayoutGap.Small" AlignItems="AlignItems.Stretch" Class="rag-picker-list">
+                @foreach (var collection in PickerCollections)
+                {
+                    var isAlreadySelected = similarityCollections.Contains(collection.Name, StringComparer.OrdinalIgnoreCase);
+                    var isChecked = pickerSelections.Contains(collection.Name);
+
+                    <div class="@ResolvePickerItemClass(isAlreadySelected)"
+                         @ondblclick="@(() => AddCollectionFromPickerAndCloseAsync(collection.Name))"
+                         data-testid="collection-picker-row">
+                        <label class="rag-picker-item__check">
+                            <CheckBox TValue="bool"
+                                      Value="@isChecked"
+                                      ValueChanged="@((bool value) => TogglePickerSelection(collection.Name, value))"
+                                      Disabled="@isAlreadySelected"
+                                      aria-label="@($"Select {collection.Name}")" />
+                            <span class="rag-picker-item__name">@collection.Name</span>
+                        </label>
+                        <span class="rag-picker-item__meta">@collection.RecordCount records</span>
+                        @if (isAlreadySelected)
+                        {
+                            <StatusBadge Text="Selected" Tone="success" />
+                        }
+                    </div>
+                }
+            </Stack>
+        </Stack>
+    </ChildContent>
+    <Footer>
+        <Stack Orientation="Orientation.Horizontal"
+               GapScale="LayoutGap.Small"
+               JustifyContent="JustifyContent.End"
+               Wrap="FlexWrap.Wrap">
+            <Button Text="Cancel" Icon="close" ButtonStyle="ButtonStyle.Light" Click="CloseCollectionPickerDialogAsync" />
+            <Button Text="Add selected" Icon="add" Disabled="@(pickerSelections.Count == 0)" Click="AddPickerSelectionsAsync" data-testid="collection-picker-confirm" />
+        </Stack>
+    </Footer>
+</Dialog>
+
 @code {
     private readonly RagDistanceMetric[] distanceOptions = Enum.GetValues<RagDistanceMetric>();
+    private readonly HashSet<string> pickerSelections = new(StringComparer.OrdinalIgnoreCase);
+
+    private int selectedTabIndex;
     private string? selectedCollectionName;
     private string? selectedRecordId;
     private string? errorMessage;
@@ -197,59 +439,111 @@
     private string lastActionDetail = "No mutations in this session.";
 
     private string? collectionSearch;
+    private bool isCollectionDialogOpen;
+    private string? collectionOriginalName;
     private string collectionName = string.Empty;
     private string collectionDescription = string.Empty;
     private string collectionVectorSize = "64";
     private RagDistanceMetric collectionDistance = RagDistanceMetric.Cosine;
+    private IReadOnlyList<string> collectionTags = Array.Empty<string>();
 
     private string? recordSearch;
+    private bool isRecordDialogOpen;
+    private string? recordOriginalId;
     private string recordId = string.Empty;
     private string recordText = string.Empty;
     private string recordMetadata = string.Empty;
+    private IReadOnlyList<string> recordTags = Array.Empty<string>();
     private IReadOnlyList<RagSandboxRecordSummary> recordResults = [];
 
+    private bool isCollectionPickerOpen;
+    private string? pickerSearch;
+    private IReadOnlyList<string> similarityCollections = Array.Empty<string>();
+    private string similarityQuery = "approval requirements for invoices";
+    private string similarityLimit = "10";
+    private IReadOnlyList<RagSandboxSearchHit> similarityResults = [];
+
+    private IReadOnlyList<RagSandboxCollectionSummary> AllCollections => Store.SearchCollections(null);
     private IReadOnlyList<RagSandboxCollectionSummary> FilteredCollections => Store.SearchCollections(collectionSearch);
-    private string CollectionCount => FilteredCollections.Count.ToString();
-    private string TotalRecordCount => Store.SearchCollections(null).Sum(collection => collection.RecordCount).ToString();
+    private IReadOnlyList<RagSandboxCollectionSummary> PickerCollections => Store.SearchCollections(pickerSearch);
+    private IReadOnlyList<string> AllCollectionNames => AllCollections.Select(collection => collection.Name).ToArray();
+    private IReadOnlyList<string> CollectionTagSuggestions => AllCollections.SelectMany(collection => collection.Tags).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(tag => tag, StringComparer.Ordinal).ToArray();
+    private IReadOnlyList<string> RecordTagSuggestions => HasSelectedCollection ? Store.GetRecords(selectedCollectionName!).SelectMany(record => record.Tags).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(tag => tag, StringComparer.Ordinal).ToArray() : Array.Empty<string>();
+    private string CollectionCount => AllCollections.Count.ToString();
+    private string TotalRecordCount => AllCollections.Sum(collection => collection.RecordCount).ToString();
     private bool HasSelectedCollection => !string.IsNullOrWhiteSpace(selectedCollectionName);
-    private bool HasSelectedRecord => !string.IsNullOrWhiteSpace(selectedRecordId);
     private string SelectedCollectionLabel => selectedCollectionName ?? "None";
     private string LastActionTone => errorMessage is null ? "success" : "danger";
-    private string CollectionSaveText => HasSelectedCollection && string.Equals(selectedCollectionName, collectionName, StringComparison.OrdinalIgnoreCase) ? "Update collection" : "Add collection";
-    private string CollectionEditorTitle => HasSelectedCollection ? "Collection editor" : "New collection";
-    private string RecordsPanelDescription => HasSelectedCollection ? $"Search and manage records in {selectedCollectionName}." : "Select a collection to view records.";
-    private string RecordEditorTitle => HasSelectedRecord ? "Record editor" : "New record";
-    private string RecordSaveText => HasSelectedRecord && string.Equals(selectedRecordId, recordId, StringComparison.OrdinalIgnoreCase) ? "Update record" : "Add record";
+    private string CollectionDialogTitle => string.IsNullOrWhiteSpace(collectionOriginalName) ? "Add collection" : "Edit collection";
+    private string CollectionSaveText => string.IsNullOrWhiteSpace(collectionOriginalName) ? "Add collection" : "Update collection";
+    private string RecordsPanelTitle => HasSelectedCollection ? $"Records in {selectedCollectionName}" : "Records";
+    private string RecordsPanelDescription => HasSelectedCollection ? "Search, add, update, and delete records for the selected collection." : "Select a collection to view records.";
+    private string RecordDialogTitle => string.IsNullOrWhiteSpace(recordOriginalId) ? "Add record" : "Edit record";
+    private string RecordDialogSubtitle => HasSelectedCollection ? $"Collection: {selectedCollectionName}" : "Select a collection before saving.";
+    private string RecordSaveText => string.IsNullOrWhiteSpace(recordOriginalId) ? "Add record" : "Update record";
+    private string SimilarityCollectionBadge => similarityCollections.Count.ToString();
 
     protected override void OnInitialized()
     {
-        var first = Store.SearchCollections(null).FirstOrDefault();
+        var first = AllCollections.FirstOrDefault();
         if (first is not null)
         {
             SelectCollection(first);
+            similarityCollections = [first.Name];
         }
     }
 
-    private void NewCollection()
+    private Task HandleTabChangedAsync(int index)
     {
-        selectedCollectionName = null;
-        collectionName = string.Empty;
-        collectionDescription = string.Empty;
-        collectionVectorSize = "64";
-        collectionDistance = RagDistanceMetric.Cosine;
-        NewRecord();
+        selectedTabIndex = index;
+        return Task.CompletedTask;
+    }
+
+    private void OpenRecordsForCollection(RagSandboxCollectionSummary collection)
+    {
+        SelectCollection(collection);
+        selectedTabIndex = 1;
+    }
+
+    private void SelectCollectionForRecords(string collectionName)
+    {
+        var collection = Store.GetCollection(collectionName);
+        if (collection is not null)
+        {
+            SelectCollection(collection);
+        }
     }
 
     private void SelectCollection(RagSandboxCollectionSummary collection)
     {
         selectedCollectionName = collection.Name;
+        selectedRecordId = null;
+        recordSearch = null;
+        ShowAllRecords();
+    }
+
+    private void OpenNewCollectionDialog()
+    {
+        collectionOriginalName = null;
+        collectionName = string.Empty;
+        collectionDescription = string.Empty;
+        collectionVectorSize = "64";
+        collectionDistance = RagDistanceMetric.Cosine;
+        collectionTags = Array.Empty<string>();
+        errorMessage = null;
+        isCollectionDialogOpen = true;
+    }
+
+    private void OpenEditCollectionDialog(RagSandboxCollectionSummary collection)
+    {
+        collectionOriginalName = collection.Name;
         collectionName = collection.Name;
         collectionDescription = collection.Description;
         collectionVectorSize = collection.VectorSize.ToString();
         collectionDistance = collection.Distance;
-        selectedRecordId = null;
-        NewRecord();
-        ShowAllRecords();
+        collectionTags = collection.Tags.ToArray();
+        errorMessage = null;
+        isCollectionDialogOpen = true;
     }
 
     private async Task SaveCollectionAsync()
@@ -258,15 +552,24 @@
         {
             var summary = await Store.SaveCollectionAsync(new RagSandboxCollectionEditModel
             {
+                OriginalName = collectionOriginalName,
                 Name = collectionName,
                 Description = collectionDescription,
+                Tags = collectionTags,
                 VectorSize = ParseVectorSize(),
                 Distance = collectionDistance
             });
 
             SelectCollection(summary);
-            lastAction = "Collection saved";
+            EnsureValidSimilarityCollections();
+            if (!similarityCollections.Contains(summary.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                similarityCollections = similarityCollections.Append(summary.Name).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name, StringComparer.Ordinal).ToArray();
+            }
+
+            lastAction = string.IsNullOrWhiteSpace(collectionOriginalName) ? "Collection added" : "Collection updated";
             lastActionDetail = summary.Name;
+            isCollectionDialogOpen = false;
         });
     }
 
@@ -278,38 +581,63 @@
         }
 
         errorMessage = null;
-        if (Store.DeleteCollection(collection))
+        if (!Store.DeleteCollection(collection))
         {
-            collectionSearch = null;
-            lastAction = "Collection deleted";
-            lastActionDetail = collection;
-            var next = Store.SearchCollections(null).FirstOrDefault();
-            if (next is null)
-            {
-                NewCollection();
-                recordResults = [];
-            }
-            else
-            {
-                SelectCollection(next);
-            }
+            return;
+        }
+
+        lastAction = "Collection deleted";
+        lastActionDetail = collection;
+        EnsureValidSimilarityCollections();
+        similarityResults = similarityResults
+            .Where(hit => !string.Equals(hit.CollectionName, collection, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        var next = AllCollections.FirstOrDefault();
+        if (next is null)
+        {
+            selectedCollectionName = null;
+            selectedRecordId = null;
+            recordResults = [];
+        }
+        else if (string.Equals(selectedCollectionName, collection, StringComparison.OrdinalIgnoreCase))
+        {
+            SelectCollection(next);
         }
     }
 
-    private void NewRecord()
+    private Task CloseCollectionDialogAsync()
     {
-        selectedRecordId = null;
+        isCollectionDialogOpen = false;
+        return Task.CompletedTask;
+    }
+
+    private void OpenNewRecordDialog()
+    {
+        if (!HasSelectedCollection)
+        {
+            return;
+        }
+
+        recordOriginalId = null;
         recordId = string.Empty;
         recordText = string.Empty;
         recordMetadata = string.Empty;
+        recordTags = Array.Empty<string>();
+        errorMessage = null;
+        isRecordDialogOpen = true;
     }
 
-    private void SelectRecord(RagSandboxRecordSummary record)
+    private void OpenEditRecordDialog(RagSandboxRecordSummary record)
     {
         selectedRecordId = record.Id;
+        recordOriginalId = record.Id;
         recordId = record.Id;
         recordText = record.Text;
         recordMetadata = record.Metadata;
+        recordTags = record.Tags.ToArray();
+        errorMessage = null;
+        isRecordDialogOpen = true;
     }
 
     private async Task SaveRecordAsync()
@@ -323,15 +651,18 @@
         {
             var record = await Store.SaveRecordAsync(selectedCollectionName, new RagSandboxRecordEditModel
             {
+                OriginalId = recordOriginalId,
                 Id = recordId,
                 Text = recordText,
-                Metadata = recordMetadata
+                Metadata = recordMetadata,
+                Tags = recordTags
             });
 
-            SelectRecord(record);
-            await SearchRecordsAsync();
-            lastAction = "Record saved";
+            selectedRecordId = record.Id;
+            await RefreshRecordResultsAsync();
+            lastAction = string.IsNullOrWhiteSpace(recordOriginalId) ? "Record added" : "Record updated";
             lastActionDetail = record.Id;
+            isRecordDialogOpen = false;
         });
     }
 
@@ -347,15 +678,31 @@
         {
             lastAction = "Record deleted";
             lastActionDetail = id;
-            NewRecord();
+            selectedRecordId = null;
             ShowAllRecords();
+            similarityResults = similarityResults
+                .Where(hit => !string.Equals(hit.CollectionName, selectedCollectionName, StringComparison.OrdinalIgnoreCase)
+                    || !string.Equals(hit.RecordId, id, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
         }
     }
 
-    private async Task SearchRecordsAsync()
+    private Task CloseRecordDialogAsync()
+    {
+        isRecordDialogOpen = false;
+        return Task.CompletedTask;
+    }
+
+    private Task SearchRecordsAsync()
+    {
+        return RefreshRecordResultsAsync();
+    }
+
+    private async Task RefreshRecordResultsAsync()
     {
         if (selectedCollectionName is null)
         {
+            recordResults = [];
             return;
         }
 
@@ -373,6 +720,100 @@
         recordResults = Store.GetRecords(selectedCollectionName);
     }
 
+    private void OpenCollectionPickerDialog()
+    {
+        pickerSearch = null;
+        pickerSelections.Clear();
+        errorMessage = null;
+        isCollectionPickerOpen = true;
+    }
+
+    private async Task AddCollectionFromPickerAndCloseAsync(string collectionName)
+    {
+        AddSimilarityCollections([collectionName]);
+        isCollectionPickerOpen = false;
+        lastAction = "Search collection added";
+        lastActionDetail = collectionName;
+        await Task.CompletedTask;
+    }
+
+    private Task AddPickerSelectionsAsync()
+    {
+        AddSimilarityCollections(pickerSelections);
+        lastAction = "Search collections added";
+        lastActionDetail = $"{pickerSelections.Count} selected";
+        pickerSelections.Clear();
+        isCollectionPickerOpen = false;
+        return Task.CompletedTask;
+    }
+
+    private Task CloseCollectionPickerDialogAsync()
+    {
+        isCollectionPickerOpen = false;
+        return Task.CompletedTask;
+    }
+
+    private void TogglePickerSelection(string collectionName, bool isSelected)
+    {
+        if (isSelected)
+        {
+            pickerSelections.Add(collectionName);
+        }
+        else
+        {
+            pickerSelections.Remove(collectionName);
+        }
+    }
+
+    private Task HandleSimilarityCollectionsChangedAsync(IReadOnlyList<string> values)
+    {
+        var validNames = AllCollectionNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        similarityCollections = values
+            .Where(validNames.Contains)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        similarityResults = similarityResults
+            .Where(hit => similarityCollections.Contains(hit.CollectionName, StringComparer.OrdinalIgnoreCase))
+            .ToArray();
+
+        return Task.CompletedTask;
+    }
+
+    private void AddSimilarityCollections(IEnumerable<string> names)
+    {
+        var validNames = AllCollectionNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        similarityCollections = similarityCollections
+            .Concat(names)
+            .Where(validNames.Contains)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private void ClearSimilarityCollections()
+    {
+        similarityCollections = Array.Empty<string>();
+        similarityResults = [];
+        lastAction = "Search scope cleared";
+        lastActionDetail = "No selected collections";
+    }
+
+    private async Task SearchSimilaritiesAsync()
+    {
+        await RunActionAsync(async () =>
+        {
+            similarityResults = await Store.SearchAcrossCollectionsAsync(
+                similarityCollections,
+                similarityQuery,
+                ParseLimit());
+
+            lastAction = "Similarity search";
+            lastActionDetail = $"{similarityResults.Count} results";
+        });
+    }
+
     private async Task RunActionAsync(Func<Task> action)
     {
         errorMessage = null;
@@ -388,6 +829,16 @@
         }
     }
 
+    private void EnsureValidSimilarityCollections()
+    {
+        var validNames = AllCollectionNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        similarityCollections = similarityCollections
+            .Where(validNames.Contains)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+    }
+
     private int ParseVectorSize()
     {
         if (int.TryParse(collectionVectorSize, out var vectorSize) && vectorSize > 0)
@@ -398,16 +849,61 @@
         throw new InvalidOperationException("Vector size must be a positive whole number.");
     }
 
+    private int ParseLimit()
+    {
+        if (int.TryParse(similarityLimit, out var limit) && limit > 0)
+        {
+            return Math.Clamp(limit, 1, 100);
+        }
+
+        throw new InvalidOperationException("Limit must be a positive whole number.");
+    }
+
+    private static RenderFragment RenderTags(IReadOnlyList<string> tags)
+    {
+        return builder =>
+        {
+            if (tags.Count == 0)
+            {
+                builder.OpenElement(0, "span");
+                builder.AddAttribute(1, "class", "rag-muted");
+                builder.AddContent(2, "No tags");
+                builder.CloseElement();
+                return;
+            }
+
+            builder.OpenElement(3, "div");
+            builder.AddAttribute(4, "class", "rag-tag-strip");
+            var sequence = 5;
+            foreach (var tag in tags)
+            {
+                builder.OpenComponent<Badge>(sequence++);
+                builder.AddAttribute(sequence++, "Text", tag);
+                builder.AddAttribute(sequence++, "Tone", BadgeTone.Info);
+                builder.CloseComponent();
+            }
+            builder.CloseElement();
+        };
+    }
+
     private static string FormatScore(double? score)
         => score is null ? "Stored" : score.Value.ToString("0.000");
 
-    private static string ResolveScoreTone(double? score)
+    private static string ResolveScoreClass(double? score)
     {
         if (score is null)
         {
-            return "info";
+            return "rag-score-badge rag-score-badge--stored";
         }
 
-        return score >= 0.5 ? "success" : "warning";
+        return score >= 0.5
+            ? "rag-score-badge rag-score-badge--strong"
+            : "rag-score-badge rag-score-badge--weak";
     }
+
+    private static string ResolveRailItemClass(bool isActive)
+        => isActive ? "rag-rail-item is-active" : "rag-rail-item";
+
+    private static string ResolvePickerItemClass(bool isAlreadySelected)
+        => isAlreadySelected ? "rag-picker-item is-selected" : "rag-picker-item";
 }

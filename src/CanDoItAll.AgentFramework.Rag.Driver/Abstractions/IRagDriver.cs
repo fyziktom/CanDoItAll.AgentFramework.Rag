@@ -6,6 +6,8 @@ public interface IRagDriver
 {
     string ProviderName { get; }
 
+    RagDriverCapabilities Capabilities { get; }
+
     RagCollectionOptions DefaultCollection { get; }
 
     ValueTask EnsureCollectionAsync(

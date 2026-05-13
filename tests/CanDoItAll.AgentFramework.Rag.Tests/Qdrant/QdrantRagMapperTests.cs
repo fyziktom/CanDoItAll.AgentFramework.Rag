@@ -29,7 +29,8 @@ public sealed class QdrantRagMapperTests
                 ["source"] = "policy",
                 ["priority"] = 2,
                 ["active"] = true
-            }
+            },
+            Tags = ["finance", "approval"]
         };
 
         var point = QdrantRagMapper.ToPointStruct(entry, new[] { 0.1f, 0.2f, 0.3f });
@@ -39,6 +40,7 @@ public sealed class QdrantRagMapperTests
         Assert.Equal((Value)"policy", point.Payload["source"]);
         Assert.Equal((Value)2L, point.Payload["priority"]);
         Assert.Equal((Value)true, point.Payload["active"]);
+        Assert.True(point.Payload.ContainsKey(QdrantRagMapper.KnowledgeTagsPayloadKey));
     }
 
     [Fact]
@@ -68,6 +70,7 @@ public sealed class QdrantRagMapperTests
             {
                 [QdrantRagMapper.KnowledgeIdPayloadKey] = "invoice-approval",
                 [QdrantRagMapper.KnowledgeTextPayloadKey] = "Invoices over 5000 require manager approval.",
+                [QdrantRagMapper.KnowledgeTagsPayloadKey] = new[] { "finance", "approval" },
                 ["source"] = "policy",
                 ["priority"] = 2
             }
@@ -79,6 +82,7 @@ public sealed class QdrantRagMapperTests
         Assert.Equal("Invoices over 5000 require manager approval.", result.Knowledge.Text);
         Assert.Equal("policy", result.Knowledge.Metadata["source"]);
         Assert.Equal(2L, result.Knowledge.Metadata["priority"]);
+        Assert.Equal(["approval", "finance"], result.Knowledge.Tags);
         Assert.Equal(0.98f, result.Score, precision: 3);
     }
 }

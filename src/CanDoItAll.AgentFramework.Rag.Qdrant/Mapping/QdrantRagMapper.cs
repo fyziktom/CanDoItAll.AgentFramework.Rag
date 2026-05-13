@@ -10,6 +10,7 @@ public static class QdrantRagMapper
 {
     public const string KnowledgeIdPayloadKey = "_candoitall_knowledge_id";
     public const string KnowledgeTextPayloadKey = "_candoitall_knowledge_text";
+    public const string KnowledgeTagsPayloadKey = "_candoitall_knowledge_tags";
 
     public static VectorParams ToVectorParams(RagCollectionOptions collection)
     {
@@ -59,6 +60,11 @@ public static class QdrantRagMapper
 
         point.Payload[KnowledgeIdPayloadKey] = entry.Id;
         point.Payload[KnowledgeTextPayloadKey] = entry.Text;
+        if (entry.Tags.Count > 0)
+        {
+            point.Payload[KnowledgeTagsPayloadKey] = ToPayloadValue(entry.Tags);
+        }
+
         return point;
     }
 
@@ -79,6 +85,7 @@ public static class QdrantRagMapper
 
         var id = TryReadStringPayload(point.Payload, KnowledgeIdPayloadKey) ?? point.Id.ToString();
         var text = TryReadStringPayload(point.Payload, KnowledgeTextPayloadKey) ?? string.Empty;
+        var tags = TryReadStringListPayload(point.Payload, KnowledgeTagsPayloadKey);
 
         return new RagSearchResult
         {
@@ -86,7 +93,8 @@ public static class QdrantRagMapper
             {
                 Id = id,
                 Text = text,
-                Metadata = metadata
+                Metadata = metadata,
+                Tags = tags
             },
             Score = point.Score
         };
@@ -170,9 +178,39 @@ public static class QdrantRagMapper
         return value.StringValue;
     }
 
+    private static IReadOnlyList<string> TryReadStringListPayload(
+        IDictionary<string, Value> payload,
+        string key)
+    {
+        if (!payload.TryGetValue(key, out var value))
+        {
+            return Array.Empty<string>();
+        }
+
+        if (value.KindCase == Value.KindOneofCase.ListValue)
+        {
+            return value.ListValue.Values
+                .Where(item => item.KindCase == Value.KindOneofCase.StringValue)
+                .Select(item => item.StringValue)
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(item => item, StringComparer.Ordinal)
+                .ToArray();
+        }
+
+        if (value.KindCase == Value.KindOneofCase.StringValue &&
+            !string.IsNullOrWhiteSpace(value.StringValue))
+        {
+            return [value.StringValue];
+        }
+
+        return Array.Empty<string>();
+    }
+
     private static bool IsReservedPayloadKey(string key)
     {
         return string.Equals(key, KnowledgeIdPayloadKey, StringComparison.Ordinal) ||
-            string.Equals(key, KnowledgeTextPayloadKey, StringComparison.Ordinal);
+            string.Equals(key, KnowledgeTextPayloadKey, StringComparison.Ordinal) ||
+            string.Equals(key, KnowledgeTagsPayloadKey, StringComparison.Ordinal);
     }
 }

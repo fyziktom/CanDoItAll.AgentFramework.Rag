@@ -19,6 +19,7 @@ The generic driver surface is centered on:
 - `IRagDriver` for ensuring collections, upserting knowledge, deleting knowledge, and searching.
 - `IRagDriverFactory` for selecting a configured vector database provider.
 - `IRagEmbeddingGenerator` for converting text into vectors.
+- `RagDriverCapabilities` for provider features such as record tag support.
 - `RagKnowledgeEntry`, `RagSearchRequest`, `RagSearchResult`, and `RagCollectionOptions` for typed data flow.
 
 The Driver project does not reference `Qdrant.Client`. Qdrant-specific types stay in `CanDoItAll.AgentFramework.Rag.Qdrant`.
@@ -45,6 +46,8 @@ The Qdrant project references:
 ```xml
 <PackageReference Include="Qdrant.Client" Version="1.15.0" />
 ```
+
+Qdrant declares record tag support. Tags are stored as reserved payload metadata and round-trip back into `RagKnowledgeEntry.Tags`. Drivers that do not support tags reject tagged entries instead of silently dropping them.
 
 Register the Qdrant driver:
 
@@ -101,8 +104,12 @@ Open `http://localhost:5046`.
 
 The sandbox uses BaseLib components and a session-scoped in-memory store over the RAG models. It supports:
 
-- Add, update, delete, and search collection definitions.
-- Add, update, delete, and vector-search records in the selected collection.
+- Add, update, delete, and search collection definitions from dialog forms.
+- Add, update, delete, and vector-search records in the selected collection from dialog forms.
+- Collection and record tags through BaseLib `TagEditor`.
+- Tabbed collection management, record management, and similarity search.
+- A record management layout with a collection rail and right-side record workspace.
+- Cross-collection similarity search with a dialog picker, double-click single add, checkbox multi-select, and removable selected-collection chips.
 - Local deterministic embeddings, so Qdrant, OpenAI, Ollama, and model files are not required for the UI demo.
 
 ## Validation

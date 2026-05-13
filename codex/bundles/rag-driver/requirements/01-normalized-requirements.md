@@ -12,3 +12,11 @@
 | `R008` | Provide at least one local deterministic embedding implementation for samples/tests without external services. | Tests and sample can run without OpenAI, Ollama, model files, or network calls. |
 | `R009` | Add a sample console application that demonstrates configuring the factory, creating/ensuring storage, adding knowledge, and searching it. | Sample project compiles and README documents how to run it against local Qdrant. |
 | `R010` | Document setup, provider boundaries, and Qdrant configuration. | Root README describes project layout, packages, sample usage, and extension points. |
+| `R011` | Move collection and record add/edit forms into BaseLib dialogs. | Browser proof opens collection and record dialogs, edits values, saves, and sees updated rows. |
+| `R012` | Split the sandbox into BaseLib tabs for collections, records, and similarity search. | Browser proof shows three tabs and each tab exposes only its own management surface. |
+| `R013` | Rework records management as a collection list plus right-side record workspace. | Selecting a collection in the left rail changes the right-side record list and actions. |
+| `R014` | Replace the large summary stat cards with compact badges. | Top of the page displays compact badge status for collections, records, selected collection, and last action. |
+| `R015` | Add generic tag capability support for records and reject tags when a driver does not support them. | Driver tests prove tag rejection for unsupported providers and Qdrant mapping preserves record tags. |
+| `R016` | Add collection and record tag editing with BaseLib `TagEditor`. | Browser proof adds/removes collection and record tags through TagEditor controls in dialogs. |
+| `R017` | Add generic similarity search across selected collections with a dialog-based collection picker. | Browser proof selects collections by double click and checkbox confirmation, removes selected collections through TagEditor chips, and sees cross-collection search results. |
+| `R018` | Repair the bundle with new subbundles for the follow-up work before implementation. | Prepared-stage bundle validator passes with subbundles 05 through 07 present. |

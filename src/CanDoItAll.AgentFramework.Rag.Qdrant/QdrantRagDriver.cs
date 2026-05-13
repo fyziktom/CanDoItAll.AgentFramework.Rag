@@ -17,7 +17,7 @@ public sealed class QdrantRagDriver : RagDriverBase
         IRagEmbeddingGenerator embeddingGenerator,
         RagCollectionOptions defaultCollection,
         QdrantRagOptions? options = null)
-        : base(RagDriverProviderNames.Qdrant, defaultCollection, embeddingGenerator)
+        : base(RagDriverProviderNames.Qdrant, defaultCollection, embeddingGenerator, RagDriverCapabilities.WithTags)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
         _options = options ?? new QdrantRagOptions();
