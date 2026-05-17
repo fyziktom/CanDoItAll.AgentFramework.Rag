@@ -42,6 +42,40 @@ public abstract class RagDriverBase : IRagDriver
         RagDeleteRequest request,
         CancellationToken cancellationToken = default);
 
+    public virtual ValueTask DeleteByFilterAsync(
+        RagDeleteByFilterRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        request.Validate();
+
+        if (!Capabilities.SupportsDeleteByFilter)
+        {
+            throw new NotSupportedException(
+                $"RAG provider '{ProviderName}' does not support delete-by-filter operations.");
+        }
+
+        throw new NotSupportedException(
+            $"RAG provider '{ProviderName}' has not implemented delete-by-filter operations.");
+    }
+
+    public virtual ValueTask<RagPayloadIndexResult> EnsurePayloadIndexAsync(
+        RagPayloadIndexRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        request.Validate();
+
+        if (!Capabilities.SupportsPayloadIndexes)
+        {
+            throw new NotSupportedException(
+                $"RAG provider '{ProviderName}' does not support payload indexes.");
+        }
+
+        throw new NotSupportedException(
+            $"RAG provider '{ProviderName}' has not implemented payload index operations.");
+    }
+
     public abstract ValueTask<IReadOnlyList<RagSearchResult>> SearchAsync(
         RagSearchRequest request,
         CancellationToken cancellationToken = default);
@@ -103,6 +137,7 @@ public abstract class RagDriverBase : IRagDriver
         ArgumentNullException.ThrowIfNull(collection);
 
         request.Validate(collection.VectorSize);
+        EnsureFilterSupported(request.Filter);
         if (request.Vector is { Length: > 0 } vector)
         {
             return vector;
@@ -114,5 +149,22 @@ public abstract class RagDriverBase : IRagDriver
 
         RagVectorValidation.EnsureVectorSize(embedding.Vector, collection.VectorSize, nameof(embedding));
         return embedding.Vector;
+    }
+
+    protected void EnsureFilterSupported(RagFilter? filter)
+    {
+        if (filter is null)
+        {
+            return;
+        }
+
+        filter.Validate();
+        if (Capabilities.SupportsFilters)
+        {
+            return;
+        }
+
+        throw new NotSupportedException(
+            $"RAG provider '{ProviderName}' does not support search filters.");
     }
 }

@@ -12,6 +12,8 @@ public sealed record RagSearchRequest
 
     public double? MinScore { get; init; }
 
+    public RagFilter? Filter { get; init; }
+
     public void Validate(int? expectedVectorSize = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(QueryText);
@@ -25,5 +27,7 @@ public sealed record RagSearchRequest
         {
             RagVectorValidation.EnsureVectorSize(Vector, expectedVectorSize, nameof(Vector));
         }
+
+        Filter?.Validate();
     }
 }

@@ -17,7 +17,11 @@ public sealed class QdrantRagDriver : RagDriverBase
         IRagEmbeddingGenerator embeddingGenerator,
         RagCollectionOptions defaultCollection,
         QdrantRagOptions? options = null)
-        : base(RagDriverProviderNames.Qdrant, defaultCollection, embeddingGenerator, RagDriverCapabilities.WithTags)
+        : base(
+            RagDriverProviderNames.Qdrant,
+            defaultCollection,
+            embeddingGenerator,
+            RagDriverCapabilities.WithTagsAndProjectionControls)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
         _options = options ?? new QdrantRagOptions();
@@ -90,6 +94,48 @@ public sealed class QdrantRagDriver : RagDriverBase
             .ConfigureAwait(false);
     }
 
+    public override async ValueTask DeleteByFilterAsync(
+        RagDeleteByFilterRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var collection = ResolveCollection(request.CollectionName);
+        request.Validate();
+
+        await _client.DeleteAsync(
+                collection.CollectionName,
+                QdrantRagMapper.ToFilter(request.Filter),
+                wait: _options.WaitForWrites,
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public override async ValueTask<RagPayloadIndexResult> EnsurePayloadIndexAsync(
+        RagPayloadIndexRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var collection = ResolveCollection(request.CollectionName);
+        request.Validate();
+
+        await _client.CreatePayloadIndexAsync(
+                collection.CollectionName,
+                request.FieldName,
+                QdrantRagMapper.ToPayloadSchemaType(request.IndexKind),
+                QdrantRagMapper.ToPayloadIndexParams(request.IndexKind),
+                wait: _options.WaitForWrites,
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        return new RagPayloadIndexResult
+        {
+            CollectionName = collection.CollectionName,
+            FieldName = request.FieldName,
+            IndexKind = request.IndexKind,
+            Status = RagPayloadIndexStatus.Ensured
+        };
+    }
+
     public override async ValueTask<IReadOnlyList<RagSearchResult>> SearchAsync(
         RagSearchRequest request,
         CancellationToken cancellationToken = default)
@@ -101,6 +147,7 @@ public sealed class QdrantRagDriver : RagDriverBase
         var points = await _client.SearchAsync(
                 collection.CollectionName,
                 vector,
+                filter: request.Filter is null ? null : QdrantRagMapper.ToFilter(request.Filter),
                 limit: (ulong)request.Limit,
                 payloadSelector: true,
                 scoreThreshold: request.MinScore is null ? null : (float)request.MinScore.Value,

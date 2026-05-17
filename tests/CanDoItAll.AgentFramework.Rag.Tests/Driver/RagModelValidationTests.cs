@@ -88,6 +88,116 @@ public sealed class RagModelValidationTests
     }
 
     [Fact]
+    public void SearchRequestValidate_RejectsInvalidFilter()
+    {
+        var request = new RagSearchRequest
+        {
+            QueryText = "approval rules",
+            Filter = RagFilterGroup.All()
+        };
+
+        Assert.Throws<ArgumentException>(() => request.Validate());
+    }
+
+    [Fact]
+    public void FilterValidation_AllowsBooleanCompositionAndRange()
+    {
+        var filter = RagFilterGroup.All(
+            RagFilterCondition.Equal("sourceKind", "policy"),
+            RagFilterCondition.In("projectId", "project-a", "project-b"),
+            RagFilterCondition.Within("projectionVersion", RagFilterRange.Closed(2, 5)),
+            RagFilterCondition.Exists("embeddingProfile"));
+
+        filter.Validate();
+    }
+
+    [Fact]
+    public void FilterValidation_RejectsMixedMembershipKinds()
+    {
+        var filter = RagFilterCondition.In("projectId", "project-a", 42);
+
+        Assert.Throws<ArgumentException>(() => filter.Validate());
+    }
+
+    [Fact]
+    public void FilterValidation_RejectsInvalidRangeKind()
+    {
+        var filter = RagFilterCondition.GreaterThan("sourceKind", "policy");
+
+        Assert.Throws<ArgumentException>(() => filter.Validate());
+    }
+
+    [Fact]
+    public void PayloadIndexRequestValidate_RejectsUnsupportedIndexKind()
+    {
+        var request = new RagPayloadIndexRequest
+        {
+            FieldName = "projectId",
+            IndexKind = RagPayloadIndexKind.Unknown
+        };
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => request.Validate());
+    }
+
+    [Fact]
+    public async Task RagDriverBase_RejectsFiltersWhenProviderDoesNotSupportThem()
+    {
+        var driver = new UnsupportedTagDriver();
+        var request = new RagSearchRequest
+        {
+            QueryText = "approval rules",
+            Filter = RagFilterCondition.Equal("sourceKind", "policy")
+        };
+
+        var exception = await Assert.ThrowsAsync<NotSupportedException>(async () =>
+            await driver.SearchAsync(request));
+
+        Assert.Contains("does not support search filters", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RagDriverBase_RejectsPayloadIndexesWhenProviderDoesNotSupportThem()
+    {
+        var driver = new UnsupportedTagDriver();
+        var request = new RagPayloadIndexRequest
+        {
+            FieldName = "projectId",
+            IndexKind = RagPayloadIndexKind.Keyword
+        };
+
+        var exception = await Assert.ThrowsAsync<NotSupportedException>(async () =>
+            await driver.EnsurePayloadIndexAsync(request));
+
+        Assert.Contains("does not support payload indexes", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RagDriverBase_RejectsDeleteByFilterWhenProviderDoesNotSupportIt()
+    {
+        var driver = new UnsupportedTagDriver();
+        var request = new RagDeleteByFilterRequest
+        {
+            Filter = RagFilterCondition.Equal("sourceId", "source-1")
+        };
+
+        var exception = await Assert.ThrowsAsync<NotSupportedException>(async () =>
+            await driver.DeleteByFilterAsync(request));
+
+        Assert.Contains("does not support delete-by-filter", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DeleteByFilterRequestValidate_RejectsInvalidFilter()
+    {
+        var request = new RagDeleteByFilterRequest
+        {
+            Filter = RagFilterGroup.Any()
+        };
+
+        Assert.Throws<ArgumentException>(() => request.Validate());
+    }
+
+    [Fact]
     public void VectorValidation_RejectsNonFiniteValues()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -137,7 +247,18 @@ public sealed class RagModelValidationTests
             RagSearchRequest request,
             CancellationToken cancellationToken = default)
         {
-            return ValueTask.FromResult<IReadOnlyList<RagSearchResult>>(Array.Empty<RagSearchResult>());
+            return SearchCoreAsync(request, cancellationToken);
+        }
+
+        private async ValueTask<IReadOnlyList<RagSearchResult>> SearchCoreAsync(
+            RagSearchRequest request,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+            var collection = ResolveCollection(request.CollectionName);
+            _ = await ResolveQueryVectorAsync(request, collection, cancellationToken);
+
+            return Array.Empty<RagSearchResult>();
         }
     }
 }
