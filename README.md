@@ -44,10 +44,12 @@ services.AddSingleton<IRagEmbeddingGenerator>(
 The Qdrant project references:
 
 ```xml
-<PackageReference Include="Qdrant.Client" Version="1.15.0" />
+<PackageReference Include="Qdrant.Client" Version="1.18.1" />
 ```
 
 Qdrant declares record tag support. Tags are stored as reserved payload metadata and round-trip back into `RagKnowledgeEntry.Tags`. Drivers that do not support tags reject tagged entries instead of silently dropping them.
+
+`QdrantRagDriverLease` is available to isolated composition roots that need the driver and client to share an explicit lifetime without registering a process-wide `IRagDriver`.
 
 Register the Qdrant driver:
 

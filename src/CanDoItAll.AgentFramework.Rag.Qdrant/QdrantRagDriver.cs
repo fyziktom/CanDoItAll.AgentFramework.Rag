@@ -2,6 +2,7 @@ using CanDoItAll.AgentFramework.Rag.Driver.Abstractions;
 using CanDoItAll.AgentFramework.Rag.Driver.Embeddings;
 using CanDoItAll.AgentFramework.Rag.Driver.Models;
 using CanDoItAll.AgentFramework.Rag.Qdrant.Mapping;
+using Grpc.Core;
 using Qdrant.Client;
 using Qdrant.Client.Grpc;
 
@@ -35,23 +36,39 @@ public sealed class QdrantRagDriver : RagDriverBase
         var effectiveCollection = collection ?? DefaultCollection;
         effectiveCollection.Validate();
 
-        if (await _client.CollectionExistsAsync(effectiveCollection.CollectionName, cancellationToken)
+        if (!await _client.CollectionExistsAsync(effectiveCollection.CollectionName, cancellationToken)
                 .ConfigureAwait(false))
         {
-            return;
+            if (!_options.CreateCollectionIfMissing)
+            {
+                throw new InvalidOperationException(
+                    $"Qdrant collection '{effectiveCollection.CollectionName}' does not exist and automatic creation is disabled.");
+            }
+
+            try
+            {
+                await _client.CreateCollectionAsync(
+                        effectiveCollection.CollectionName,
+                        QdrantRagMapper.ToVectorParams(effectiveCollection),
+                        cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (RpcException exception) when (exception.StatusCode == StatusCode.AlreadyExists)
+            {
+            }
         }
 
-        if (!_options.CreateCollectionIfMissing)
+        var info = await _client.GetCollectionInfoAsync(
+                effectiveCollection.CollectionName,
+                cancellationToken)
+            .ConfigureAwait(false);
+        var actual = info.Config?.Params?.VectorsConfig?.Params;
+        var expected = QdrantRagMapper.ToVectorParams(effectiveCollection);
+        if (actual is null || actual.Size != expected.Size || actual.Distance != expected.Distance)
         {
             throw new InvalidOperationException(
-                $"Qdrant collection '{effectiveCollection.CollectionName}' does not exist and automatic creation is disabled.");
+                $"Qdrant collection '{effectiveCollection.CollectionName}' does not match the configured vector size and distance.");
         }
-
-        await _client.CreateCollectionAsync(
-                effectiveCollection.CollectionName,
-                QdrantRagMapper.ToVectorParams(effectiveCollection),
-                cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
     }
 
     public override async ValueTask UpsertAsync(
@@ -69,12 +86,16 @@ public sealed class QdrantRagDriver : RagDriverBase
             points.Add(QdrantRagMapper.ToPointStruct(entry, vector));
         }
 
-        await _client.UpsertAsync(
+        var result = await _client.UpsertAsync(
                 collection.CollectionName,
                 points,
                 wait: _options.WaitForWrites,
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
+        QdrantRagWriteReceiptPolicy.EnsureAccepted(
+            result,
+            "upsert knowledge entries",
+            _options.WaitForWrites);
     }
 
     public override async ValueTask DeleteAsync(
@@ -86,12 +107,16 @@ public sealed class QdrantRagDriver : RagDriverBase
         request.Validate();
 
         var ids = request.KnowledgeIds.Select(QdrantRagMapper.ToPointId).ToArray();
-        await _client.DeleteAsync(
+        var result = await _client.DeleteAsync(
                 collection.CollectionName,
                 ids,
                 wait: _options.WaitForWrites,
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
+        QdrantRagWriteReceiptPolicy.EnsureAccepted(
+            result,
+            "delete knowledge entries",
+            _options.WaitForWrites);
     }
 
     public override async ValueTask DeleteByFilterAsync(
@@ -102,12 +127,16 @@ public sealed class QdrantRagDriver : RagDriverBase
         var collection = ResolveCollection(request.CollectionName);
         request.Validate();
 
-        await _client.DeleteAsync(
+        var result = await _client.DeleteAsync(
                 collection.CollectionName,
                 QdrantRagMapper.ToFilter(request.Filter),
                 wait: _options.WaitForWrites,
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
+        QdrantRagWriteReceiptPolicy.EnsureAccepted(
+            result,
+            "delete knowledge entries by filter",
+            _options.WaitForWrites);
     }
 
     public override async ValueTask<RagPayloadIndexResult> EnsurePayloadIndexAsync(
@@ -118,18 +147,43 @@ public sealed class QdrantRagDriver : RagDriverBase
         var collection = ResolveCollection(request.CollectionName);
         request.Validate();
 
-        await _client.CreatePayloadIndexAsync(
+        var expectedSchema = QdrantRagMapper.ToPayloadSchemaType(request.IndexKind);
+        var info = await _client.GetCollectionInfoAsync(collection.CollectionName, cancellationToken)
+            .ConfigureAwait(false);
+        if (info.PayloadSchema.TryGetValue(request.FieldName, out var existingSchema))
+        {
+            if (existingSchema.DataType != expectedSchema)
+            {
+                throw new InvalidOperationException(
+                    $"Qdrant payload field '{request.FieldName}' is indexed with an incompatible type.");
+            }
+
+            return EnsuredIndex(collection.CollectionName, request);
+        }
+
+        var result = await _client.CreatePayloadIndexAsync(
                 collection.CollectionName,
                 request.FieldName,
-                QdrantRagMapper.ToPayloadSchemaType(request.IndexKind),
+                expectedSchema,
                 QdrantRagMapper.ToPayloadIndexParams(request.IndexKind),
                 wait: _options.WaitForWrites,
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
+        QdrantRagWriteReceiptPolicy.EnsureAccepted(
+            result,
+            $"create payload index '{request.FieldName}'",
+            _options.WaitForWrites);
 
+        return EnsuredIndex(collection.CollectionName, request);
+    }
+
+    private static RagPayloadIndexResult EnsuredIndex(
+        string collectionName,
+        RagPayloadIndexRequest request)
+    {
         return new RagPayloadIndexResult
         {
-            CollectionName = collection.CollectionName,
+            CollectionName = collectionName,
             FieldName = request.FieldName,
             IndexKind = request.IndexKind,
             Status = RagPayloadIndexStatus.Ensured
@@ -156,4 +210,5 @@ public sealed class QdrantRagDriver : RagDriverBase
 
         return points.Select(QdrantRagMapper.ToSearchResult).ToArray();
     }
+
 }

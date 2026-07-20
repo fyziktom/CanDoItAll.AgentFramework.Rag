@@ -1,0 +1,10 @@
+**/bin
+**/obj
+.git
+.vs
+.vscode
+codex
+src/CanDoItAll.AgentFramework.Rag.Sample
+src/CanDoItAll.AgentFramework.Rag.Sandbox
+tests
+*.user
