@@ -1,6 +1,10 @@
 # CanDoItAll Agent Framework RAG
 
 [![CI](https://github.com/fyziktom/CanDoItAll.AgentFramework.Rag/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/fyziktom/CanDoItAll.AgentFramework.Rag/actions/workflows/ci.yml)
+[![RAG Qdrant version](https://img.shields.io/nuget/v/CanDoItAll.AgentFramework.Rag.Qdrant.svg?logo=nuget&label=RAG%20Qdrant)](https://www.nuget.org/packages/CanDoItAll.AgentFramework.Rag.Qdrant)
+[![RAG Qdrant downloads](https://img.shields.io/nuget/dt/CanDoItAll.AgentFramework.Rag.Qdrant.svg?logo=nuget&label=RAG%20Qdrant%20downloads)](https://www.nuget.org/packages/CanDoItAll.AgentFramework.Rag.Qdrant)
+[![RAG Driver version](https://img.shields.io/nuget/v/CanDoItAll.AgentFramework.Rag.Driver.svg?logo=nuget&label=RAG%20Driver)](https://www.nuget.org/packages/CanDoItAll.AgentFramework.Rag.Driver)
+[![RAG Driver downloads](https://img.shields.io/nuget/dt/CanDoItAll.AgentFramework.Rag.Driver.svg?logo=nuget&label=RAG%20Driver%20downloads)](https://www.nuget.org/packages/CanDoItAll.AgentFramework.Rag.Driver)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/download/dotnet/10.0)
 [![License](https://img.shields.io/badge/license-MIT--derived%20with%20website%20link-blue.svg)](LICENSE)
 

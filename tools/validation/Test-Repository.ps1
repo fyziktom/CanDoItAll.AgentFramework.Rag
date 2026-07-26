@@ -48,6 +48,34 @@ foreach ($relativePath in $requiredFiles) {
     }
 }
 
+$readmePath = Join-Path $repositoryRoot 'README.md'
+if (Test-Path -LiteralPath $readmePath -PathType Leaf) {
+    $readme = Get-Content -Raw -LiteralPath $readmePath
+    $packageBadgeExpectations = @(
+        [pscustomobject]@{
+            PackageId = 'CanDoItAll.AgentFramework.Rag.Qdrant'
+            EncodedLabel = 'RAG%20Qdrant'
+        }
+        [pscustomobject]@{
+            PackageId = 'CanDoItAll.AgentFramework.Rag.Driver'
+            EncodedLabel = 'RAG%20Driver'
+        }
+    )
+
+    foreach ($badge in $packageBadgeExpectations) {
+        $requiredBadgeUrls = @(
+            "https://img.shields.io/nuget/v/$($badge.PackageId).svg?logo=nuget&label=$($badge.EncodedLabel)",
+            "https://img.shields.io/nuget/dt/$($badge.PackageId).svg?logo=nuget&label=$($badge.EncodedLabel)%20downloads",
+            "https://www.nuget.org/packages/$($badge.PackageId)"
+        )
+        foreach ($requiredBadgeUrl in $requiredBadgeUrls) {
+            if ($readme.IndexOf($requiredBadgeUrl, [StringComparison]::Ordinal) -lt 0) {
+                $failures.Add("README.md is missing required package badge link '$requiredBadgeUrl'.")
+            }
+        }
+    }
+}
+
 $projectExpectations = @(
     [pscustomobject]@{
         Path = 'src\CanDoItAll.AgentFramework.Rag.Driver\CanDoItAll.AgentFramework.Rag.Driver.csproj'
