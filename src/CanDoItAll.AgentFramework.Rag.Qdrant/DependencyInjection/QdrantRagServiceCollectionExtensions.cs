@@ -1,6 +1,5 @@
 using CanDoItAll.AgentFramework.Rag.Driver.Abstractions;
 using CanDoItAll.AgentFramework.Rag.Driver.DependencyInjection;
-using CanDoItAll.AgentFramework.Rag.Driver.Embeddings;
 using CanDoItAll.AgentFramework.Rag.Driver.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -14,18 +13,16 @@ public static class QdrantRagServiceCollectionExtensions
     public static IServiceCollection AddQdrantRagDriver(
         this IServiceCollection services,
         Action<QdrantRagOptions>? configureQdrant = null,
-        Action<RagDriverFactoryOptions>? configureFactory = null,
-        Action<LocalHashingRagEmbeddingOptions>? configureEmbedding = null)
+        Action<RagDriverFactoryOptions>? configureFactory = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddRagDriverCore(
             options =>
             {
-                options.ProviderName = RagDriverProviderNames.Qdrant;
+                options.ProviderName = QdrantRagDriver.ProviderIdentifier;
                 configureFactory?.Invoke(options);
-            },
-            configureEmbedding);
+            });
 
         if (configureQdrant is not null)
         {

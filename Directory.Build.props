@@ -2,10 +2,29 @@
   <PropertyGroup>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <Version>0.1.0</Version>
+    <PackageVersion>$(Version)</PackageVersion>
+    <Authors>fyziktom</Authors>
+    <PackageOwners>fyziktom</PackageOwners>
+    <Company>CanDoItAll</Company>
+    <Copyright>Copyright © 2026 fyziktom</Copyright>
+    <PackageProjectUrl>https://aicandoitall.com</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/fyziktom/CanDoItAll.AgentFramework.Rag.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <DebugType>portable</DebugType>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <DefaultItemExcludes>
       $(DefaultItemExcludes);
       .artifacts/**;
+      .mcp-state/**;
+      output/**;
+      playwright-report/**;
       test-results/**;
       TestResults/**;
       coverage/**;

@@ -4,11 +4,20 @@
 
 <PageScaffold>
     <Header>
-        <PageHeader Eyebrow="RAG sandbox" Title="Page not found" />
+        <PageHeader Eyebrow="RAG sandbox"
+                    Title="Page not found"
+                    Description="The requested sandbox route does not exist."
+                    Compact="true" />
     </Header>
     <ChildContent>
         <SectionCard Title="Missing route">
-            <p>The requested sandbox route does not exist.</p>
+            <Stack Orientation="Orientation.Horizontal"
+                   GapScale="LayoutGap.Small"
+                   Wrap="FlexWrap.Wrap">
+                <Button Text="Collections" Icon="database" Href="/collections" />
+                <Button Text="Records" Icon="description" Href="/records" ButtonStyle="ButtonStyle.Light" />
+                <Button Text="Similarity search" Icon="manage_search" Href="/similarity-search" ButtonStyle="ButtonStyle.Light" />
+            </Stack>
         </SectionCard>
     </ChildContent>
 </PageScaffold>

@@ -1,59 +1,79 @@
-# CanDoItAll.AgentFramework.Rag
+# CanDoItAll Agent Framework RAG
 
-Standalone CanDoItAll RAG driver repository.
+[![CI](https://github.com/fyziktom/CanDoItAll.AgentFramework.Rag/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/fyziktom/CanDoItAll.AgentFramework.Rag/actions/workflows/ci.yml)
+[![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/download/dotnet/10.0)
+[![License](https://img.shields.io/badge/license-MIT--derived%20with%20website%20link-blue.svg)](LICENSE)
 
-This solution keeps vector database drivers outside the main CanDoItAll solution while exposing generic contracts that the main app can consume later.
+Provider-neutral retrieval-augmented generation contracts and a Qdrant
+implementation for CanDoItAll applications.
 
-## Projects
+## Ownership
 
-- `src/CanDoItAll.AgentFramework.Rag.Driver` - provider-neutral RAG contracts, knowledge/search models, factory, and embedding abstractions.
-- `src/CanDoItAll.AgentFramework.Rag.Qdrant` - Qdrant implementation using the `Qdrant.Client` NuGet package.
-- `src/CanDoItAll.AgentFramework.Rag.Sample` - console sample that configures the factory, stores knowledge, and searches it.
-- `src/CanDoItAll.AgentFramework.Rag.Sandbox` - Blazor SSR sandbox using CanDoItAll BaseLib components for collection and record CRUD/search.
-- `tests/CanDoItAll.AgentFramework.Rag.Tests` - xUnit tests for contracts, embeddings, factory behavior, and Qdrant mapping.
+This repository owns:
 
-## Core Shape
+- RAG driver, embedding, collection, knowledge, filter, and search contracts;
+- provider selection and dependency-injection composition;
+- the Qdrant implementation and its SDK mappings;
+- a console sample and interactive Blazor validation sandbox;
+- package construction and package-content validation.
 
-The generic driver surface is centered on:
+It does not own an embedding-provider SDK, a hosted Qdrant service, or the
+shared CanDoItAll component libraries. Applications supply a production
+`IRagEmbeddingGenerator`; the sandbox consumes released BaseLib packages from
+nuget.org.
 
-- `IRagDriver` for ensuring collections, upserting knowledge, deleting knowledge, and searching.
-- `IRagDriverFactory` for selecting a configured vector database provider.
-- `IRagEmbeddingGenerator` for converting text into vectors.
-- `RagDriverCapabilities` for provider features such as record tag support.
-- `RagKnowledgeEntry`, `RagSearchRequest`, `RagSearchResult`, and `RagCollectionOptions` for typed data flow.
+## Packages and projects
 
-The Driver project does not reference `Qdrant.Client`. Qdrant-specific types stay in `CanDoItAll.AgentFramework.Rag.Qdrant`.
+| Project | Purpose | Published |
+|---|---|---|
+| `CanDoItAll.AgentFramework.Rag.Driver` | Provider-neutral contracts, models, factory, and embedding abstractions | NuGet package |
+| `CanDoItAll.AgentFramework.Rag.Qdrant` | Qdrant provider and isolated `Qdrant.Client` mappings | NuGet package |
+| `CanDoItAll.AgentFramework.Rag.Sample` | Console composition and Qdrant smoke host | No |
+| `CanDoItAll.AgentFramework.Rag.Sandbox` | BaseLib-backed interactive RAG workbench | No |
+| `CanDoItAll.AgentFramework.Rag.Tests` | Unit, mapping, composition, and sandbox-service tests | No |
 
-## Embeddings
+## Requirements
 
-`LocalHashingRagEmbeddingGenerator` is included for deterministic local samples and tests. Production callers can register their own `IRagEmbeddingGenerator` for SemanticCompletion, OpenAI, Ollama, or existing CanDoItAll provider settings.
+- The .NET SDK pinned by [`global.json`](global.json)
+- nuget.org access for package restore
+- Qdrant gRPC when running the non-dry console sample
 
-Example:
+Restore with the repository-owned source configuration:
 
-```csharp
-services.AddSingleton<IRagEmbeddingGenerator>(
-    new DelegatingRagEmbeddingGenerator(async (request, cancellationToken) =>
-    {
-        var vector = await myEmbeddingProvider.CreateEmbeddingAsync(request.Text, cancellationToken);
-        return new RagEmbedding(request.Text, vector, "my-provider");
-    }));
+```powershell
+dotnet restore CanDoItAll.AgentFramework.Rag.slnx --configfile NuGet.config
 ```
 
-## Qdrant
+## Install
 
-The Qdrant project references:
+Applications normally install the provider package, which brings the Driver
+contracts transitively:
 
-```xml
-<PackageReference Include="Qdrant.Client" Version="1.18.1" />
+```powershell
+dotnet add package CanDoItAll.AgentFramework.Rag.Qdrant
 ```
 
-Qdrant declares record tag support. Tags are stored as reserved payload metadata and round-trip back into `RagKnowledgeEntry.Tags`. Drivers that do not support tags reject tagged entries instead of silently dropping them.
+Provider authors can install only the neutral contract package:
 
-`QdrantRagDriverLease` is available to isolated composition roots that need the driver and client to share an explicit lifetime without registering a process-wide `IRagDriver`.
+```powershell
+dotnet add package CanDoItAll.AgentFramework.Rag.Driver
+```
 
-Register the Qdrant driver:
+## Compose the Qdrant driver
+
+Register the application's embedding implementation before the Qdrant
+provider. The local hashing generator is deterministic and explicitly opt-in;
+it is suitable for samples and tests, not as an implicit production default.
 
 ```csharp
+using CanDoItAll.AgentFramework.Rag.Driver.DependencyInjection;
+using CanDoItAll.AgentFramework.Rag.Driver.Embeddings;
+using CanDoItAll.AgentFramework.Rag.Driver.Models;
+using CanDoItAll.AgentFramework.Rag.Qdrant.DependencyInjection;
+
+services.AddLocalHashingRagEmbeddingGenerator(
+    options => options.Dimension = 384);
+
 services.AddQdrantRagDriver(
     configureQdrant: options =>
     {
@@ -71,20 +91,52 @@ services.AddQdrantRagDriver(
     });
 ```
 
-## Sample
+Production applications instead register their model-backed implementation:
 
-Run a dry configuration pass:
+```csharp
+services.AddSingleton<IRagEmbeddingGenerator, ApplicationEmbeddingGenerator>();
+services.AddQdrantRagDriver(/* configuration */);
+```
+
+Resolve `IRagDriver` for the configured provider or `IRagDriverFactory` when a
+caller needs explicit factory options.
+
+## Architecture
+
+The dependency direction is intentionally one-way:
+
+```text
+Sample / Sandbox / Tests
+          |
+          v
+Qdrant provider implementation ---> Qdrant.Client
+          |
+          v
+Provider-neutral Driver
+```
+
+The factory selects an `IRagDriverProvider`; dependency injection constructs
+each provider with its concrete dependencies. The provider contract never
+receives an `IServiceProvider`. Qdrant mapping owners are internal to the
+provider package, and the Driver project contains no Qdrant SDK reference or
+provider-specific default.
+
+See [`docs/architecture.md`](docs/architecture.md) for the decisions,
+boundaries, responsibility inventory, and release acceptance criteria. The
+completed governance result is in
+[`docs/architecture-review.md`](docs/architecture-review.md).
+
+## Console sample
+
+Validate composition without calling Qdrant:
 
 ```powershell
 dotnet run --project src/CanDoItAll.AgentFramework.Rag.Sample -- --dry-run
 ```
 
-Run against local Qdrant gRPC:
+Run the full sample against Qdrant gRPC:
 
 ```powershell
-# Qdrant.Client uses gRPC. Make sure your container publishes 6334, for example:
-# docker run -p 6333:6333 -p 6334:6334 qdrant/qdrant
-
 $env:QDRANT_HOST = "localhost"
 $env:QDRANT_GRPC_PORT = "6334"
 $env:RAG_COLLECTION = "candoitall-knowledge-sample"
@@ -92,32 +144,75 @@ $env:RAG_VECTOR_SIZE = "64"
 dotnet run --project src/CanDoItAll.AgentFramework.Rag.Sample
 ```
 
-The sample uses local deterministic embeddings, ensures the collection, upserts two knowledge entries, and searches by query text.
+## Blazor sandbox
 
-## Blazor Sandbox
-
-Run the interactive SSR sandbox:
+Run the interactive sandbox:
 
 ```powershell
-dotnet run --project src/CanDoItAll.AgentFramework.Rag.Sandbox --urls http://localhost:5046
+dotnet run --project src/CanDoItAll.AgentFramework.Rag.Sandbox `
+  --urls http://localhost:5046
 ```
 
-Open `http://localhost:5046`.
+The BaseLib `SideMenu` exposes three routed workspaces:
 
-The sandbox uses BaseLib components and a session-scoped in-memory store over the RAG models. It supports:
+- `/collections` for collection CRUD and filtering;
+- `/records` for collection-scoped record CRUD and filtering;
+- `/similarity-search` for multi-collection vector search.
 
-- Add, update, delete, and search collection definitions from dialog forms.
-- Add, update, delete, and vector-search records in the selected collection from dialog forms.
-- Collection and record tags through BaseLib `TagEditor`.
-- Tabbed collection management, record management, and similarity search.
-- A record management layout with a collection rail and right-side record workspace.
-- Cross-collection similarity search with a dialog picker, double-click single add, checkbox multi-select, and removable selected-collection chips.
-- Local deterministic embeddings, so Qdrant, OpenAI, Ollama, and model files are not required for the UI demo.
+The sandbox uses session-scoped in-memory state and explicitly registered
+local deterministic embeddings. It does not require Qdrant, an external model,
+or model files. Browser and responsive evidence is recorded in
+[`docs/ui-validation.md`](docs/ui-validation.md).
 
-## Validation
+## Validate
+
+Run the repository gate:
 
 ```powershell
-dotnet restore CanDoItAll.AgentFramework.Rag.slnx
-dotnet build CanDoItAll.AgentFramework.Rag.slnx
-dotnet test tests/CanDoItAll.AgentFramework.Rag.Tests/CanDoItAll.AgentFramework.Rag.Tests.csproj
+./tools/validation/Test-Repository.ps1
 ```
+
+Or run the individual .NET steps:
+
+```powershell
+dotnet restore CanDoItAll.AgentFramework.Rag.slnx --configfile NuGet.config
+dotnet build CanDoItAll.AgentFramework.Rag.slnx --configuration Release --no-restore
+dotnet test CanDoItAll.AgentFramework.Rag.slnx --configuration Release --no-build --no-restore
+```
+
+## Build packages
+
+Preview the exact package operation:
+
+```powershell
+./tools/deployment/nugets/Build-NuGets.ps1 `
+  -Version 0.2.0 `
+  -WhatIf
+```
+
+Build, test, pack, and validate the two intended packages:
+
+```powershell
+./tools/deployment/nugets/Build-NuGets.ps1 `
+  -Version 0.2.0 `
+  -OutputDirectory artifacts/packages/0.2.0
+```
+
+The script never publishes. See [`docs/publishing.md`](docs/publishing.md) for
+the artifact contract and separately authorized nuget.org publishing step.
+
+## License and contributions
+
+This repository uses the
+[MIT-Derived License with CanDoItAll Website Link Requirement](LICENSE).
+Redistributions of the software or a substantial portion of it in source or
+binary form must include at least one link to
+[aicandoitall.com](https://aicandoitall.com). One such link satisfies the
+added condition for a distribution containing multiple covered CanDoItAll
+libraries.
+
+Code contributions are limited to partners approved by the maintainer. See
+[`CONTRIBUTING.md`](CONTRIBUTING.md) and contact the `fyziktom` account on
+LinkedIn before opening a pull request. Report security issues according to
+[`SECURITY.md`](SECURITY.md); repository-specific agent instructions are in
+[`AGENTS.md`](AGENTS.md).

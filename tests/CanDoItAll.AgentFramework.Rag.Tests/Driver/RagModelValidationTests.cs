@@ -70,7 +70,7 @@ public sealed class RagModelValidationTests
         };
 
         var exception = await Assert.ThrowsAsync<NotSupportedException>(async () =>
-            await driver.UpsertAsync(request));
+            await driver.UpsertAsync(request, TestContext.Current.CancellationToken));
 
         Assert.Contains("does not support knowledge entry tags", exception.Message, StringComparison.Ordinal);
     }
@@ -150,7 +150,7 @@ public sealed class RagModelValidationTests
         };
 
         var exception = await Assert.ThrowsAsync<NotSupportedException>(async () =>
-            await driver.SearchAsync(request));
+            await driver.SearchAsync(request, TestContext.Current.CancellationToken));
 
         Assert.Contains("does not support search filters", exception.Message, StringComparison.Ordinal);
     }
@@ -166,7 +166,7 @@ public sealed class RagModelValidationTests
         };
 
         var exception = await Assert.ThrowsAsync<NotSupportedException>(async () =>
-            await driver.EnsurePayloadIndexAsync(request));
+            await driver.EnsurePayloadIndexAsync(request, TestContext.Current.CancellationToken));
 
         Assert.Contains("does not support payload indexes", exception.Message, StringComparison.Ordinal);
     }
@@ -181,7 +181,7 @@ public sealed class RagModelValidationTests
         };
 
         var exception = await Assert.ThrowsAsync<NotSupportedException>(async () =>
-            await driver.DeleteByFilterAsync(request));
+            await driver.DeleteByFilterAsync(request, TestContext.Current.CancellationToken));
 
         Assert.Contains("does not support delete-by-filter", exception.Message, StringComparison.Ordinal);
     }

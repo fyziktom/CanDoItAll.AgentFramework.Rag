@@ -1,0 +1,26 @@
+@inherits LayoutComponentBase
+@implements IAsyncDisposable
+@inject NavigationManager Navigation
+@inject SideMenuService SideMenus
+
+<ThemeHost ThemeKey="@CadThemes.Light">
+    <Layout FitViewport="true"
+            LockOverflow="true"
+            Class="rag-sandbox-shell flex-nowrap">
+        <SideMenu MenuId="@ActiveMenuId"
+                  Title="RAG sandbox"
+                  Subtitle="Agent Framework"
+                  Icon="database"
+                  Items="@NavigationItems"
+                  FillHeight="true"
+                  ItemSelected="HandleMenuSelectionAsync" />
+
+        <Body FillHeight="true" Scrollable="true">
+            @Body
+        </Body>
+    </Layout>
+
+    <DialogHost />
+    <Tooltip />
+    <Notification Position="NotificationPosition.TopRight" />
+</ThemeHost>

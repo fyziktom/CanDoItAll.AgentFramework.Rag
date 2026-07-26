@@ -1,0 +1,209 @@
+@page "/similarity-search"
+@inject RagSandboxStore Store
+
+<PageTitle>Similarity search · RAG Sandbox</PageTitle>
+
+<PageScaffold Mode="PageScaffoldMode.FocusWorkbench">
+    <Header>
+        <PageHeader Eyebrow="RAG sandbox"
+                    Title="Similarity search"
+                    Description="Run a RAG-style query across one or more selected collections."
+                    Compact="true">
+            <Stats>
+                <Cluster Gap="LayoutGap.Small" Wrap="FlexWrap.Wrap">
+                    <StatusBadge Text="@($"{similarityCollections.Count} selected")" Tone="info" />
+                    <StatusBadge Text="@($"{similarityResults.Count} results")" Tone="success" />
+                    <StatusBadge Text="@lastAction" Tone="@LastActionTone" />
+                </Cluster>
+            </Stats>
+        </PageHeader>
+    </Header>
+
+    <ChildContent>
+        <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+            @if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                <Alert AlertStyle="AlertStyle.Danger">
+                    <strong>Search failed.</strong> @errorMessage
+                </Alert>
+            }
+
+            <Grid Gap="LayoutGap.Large"
+                  ColumnTemplateLg="minmax(20rem,0.85fr) minmax(0,1.4fr)">
+                <SectionCard Title="Search scope"
+                             Description="Choose the collections and query used for retrieval.">
+                    <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+                        <FormField Text="Selected collections">
+                            <TagEditor Value="@similarityCollections"
+                                       ValueChanged="HandleSimilarityCollectionsChangedAsync"
+                                       Suggestions="@AllCollectionNames"
+                                       Placeholder="Add collection"
+                                       MaxTags="12"
+                                       TestId="similarity-collections"
+                                       InputTestId="similarity-collections-input" />
+                        </FormField>
+
+                        <Stack Orientation="Orientation.Horizontal"
+                               GapScale="LayoutGap.Small"
+                               Wrap="FlexWrap.Wrap">
+                            <Button Text="Add collections"
+                                    Icon="add"
+                                    Click="OpenCollectionPickerDialog"
+                                    data-testid="similarity-open-picker" />
+                            <Button Text="Clear"
+                                    Icon="close"
+                                    ButtonStyle="ButtonStyle.Light"
+                                    Disabled="@(similarityCollections.Count == 0 || isSimilaritySearching)"
+                                    Click="ClearSimilarityCollections" />
+                        </Stack>
+
+                        <FormField Text="Query">
+                            <TextArea Rows="6"
+                                      Immediate="true"
+                                      Placeholder="What knowledge should be retrieved?"
+                                      @bind-Value="similarityQuery"
+                                      data-testid="similarity-query" />
+                        </FormField>
+
+                        <FormField Text="Limit">
+                            <TextBox Immediate="true"
+                                     @bind-Value="similarityLimit"
+                                     data-testid="similarity-limit" />
+                        </FormField>
+
+                        <Button Text="Search similarities"
+                                Icon="search"
+                                Disabled="@(similarityCollections.Count == 0)"
+                                IsBusy="@isSimilaritySearching"
+                                Click="SearchSimilaritiesAsync"
+                                data-testid="similarity-search-button" />
+                    </Stack>
+                </SectionCard>
+
+                <SectionCard Title="Similarity results"
+                             Description="Results are ranked across the selected collections.">
+                    @if (similarityResults.Count == 0 && !isSimilaritySearching)
+                    {
+                        <EmptyState Eyebrow="Search"
+                                    Title="No similarity results"
+                                    Description="Choose collections and run a query to see ranked knowledge records." />
+                    }
+                    else
+                    {
+                        <DataGrid TItem="RagSandboxSearchHit"
+                                  Data="@similarityResults"
+                                  AllowPaging="true"
+                                  PageSize="8"
+                                  Caption="Similarity search results"
+                                  Loading="@isSimilaritySearching"
+                                  LoadingText="Searching collections..."
+                                  data-testid="similarity-results">
+                            <Columns>
+                                <DataGridColumn TItem="RagSandboxSearchHit" Title="Collection">
+                                    <Template Context="hit">
+                                        <Stack GapScale="LayoutGap.Tiny">
+                                            <TextBlock TextStyle="TextStyle.Subtitle2" Value="@hit.CollectionName" />
+                                            <TextBlock TextStyle="TextStyle.Note" Value="@hit.RecordId" />
+                                        </Stack>
+                                    </Template>
+                                </DataGridColumn>
+                                <DataGridColumn TItem="RagSandboxSearchHit" Title="Tags">
+                                    <Template Context="hit">
+                                        <TagBadges Tags="@hit.Tags" />
+                                    </Template>
+                                </DataGridColumn>
+                                <DataGridColumn TItem="RagSandboxSearchHit" Title="Text" Property="Text" />
+                                <DataGridColumn TItem="RagSandboxSearchHit" Title="Score">
+                                    <Template Context="hit">
+                                        <StatusBadge Text="@hit.Score.ToString("0.000")"
+                                                     TypedTone="@ResolveScoreTone(hit.Score)" />
+                                    </Template>
+                                </DataGridColumn>
+                            </Columns>
+                        </DataGrid>
+                    }
+                </SectionCard>
+            </Grid>
+        </Stack>
+    </ChildContent>
+</PageScaffold>
+
+<Dialog IsOpen="@isCollectionPickerOpen"
+        Title="Add search collections"
+        Subtitle="Double-click one collection to add it immediately, or select several and confirm."
+        Size="ModalSize.Compact"
+        DenseChrome="true"
+        OnClose="CloseCollectionPickerDialogAsync"
+        TestId="collection-picker-dialog">
+    <ChildContent>
+        <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+            <FormField Text="Filter collections">
+                <TextBox Immediate="true"
+                         Placeholder="Name, description, or tag"
+                         @bind-Value="pickerSearch"
+                         data-testid="collection-picker-search" />
+            </FormField>
+
+            @if (PickerCollections.Count == 0)
+            {
+                <EmptyState Eyebrow="Collections"
+                            Title="No matching collections"
+                            Description="Change the filter to find another collection." />
+            }
+            else
+            {
+                <Stack GapScale="LayoutGap.Small" AlignItems="AlignItems.Stretch">
+                    @foreach (var collection in PickerCollections)
+                    {
+                        var isAlreadySelected = similarityCollections.Contains(
+                            collection.Name,
+                            StringComparer.OrdinalIgnoreCase);
+                        var isChecked = pickerSelections.Contains(collection.Name);
+
+                        <SelectionListItem @key="collection.Name"
+                                           Title="@collection.Name"
+                                           Meta="@($"{collection.RecordCount} records")"
+                                           Summary="@collection.Description"
+                                           Dense="true"
+                                           Disabled="@isAlreadySelected"
+                                           IsSelected="@(isAlreadySelected || isChecked)"
+                                           OnSelect="@(() => TogglePickerSelection(collection.Name))"
+                                           DataTestId="@SandboxTestIds.ForCollection("collection-picker-row", collection.Name)"
+                                           @ondblclick="@(() => AddCollectionFromPickerAndCloseAsync(collection.Name))">
+                            <Status>
+                                @if (isAlreadySelected)
+                                {
+                                    <StatusBadge Text="Selected" Tone="success" />
+                                }
+                                else if (isChecked)
+                                {
+                                    <StatusBadge Text="To add" Tone="info" />
+                                }
+                                else
+                                {
+                                    <StatusBadge Text="Available" Tone="neutral" />
+                                }
+                            </Status>
+                        </SelectionListItem>
+                    }
+                </Stack>
+            }
+        </Stack>
+    </ChildContent>
+    <Footer>
+        <Stack Orientation="Orientation.Horizontal"
+               GapScale="LayoutGap.Small"
+               JustifyContent="JustifyContent.End"
+               Wrap="FlexWrap.Wrap">
+            <Button Text="Cancel"
+                    Icon="close"
+                    ButtonStyle="ButtonStyle.Light"
+                    Click="CloseCollectionPickerDialogAsync" />
+            <Button Text="Add selected"
+                    Icon="add"
+                    Disabled="@(pickerSelections.Count == 0)"
+                    Click="AddPickerSelectionsAsync"
+                    data-testid="collection-picker-confirm" />
+        </Stack>
+    </Footer>
+</Dialog>

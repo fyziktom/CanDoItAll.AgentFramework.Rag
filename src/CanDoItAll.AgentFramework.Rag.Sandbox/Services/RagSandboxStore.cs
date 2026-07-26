@@ -5,22 +5,29 @@ namespace CanDoItAll.AgentFramework.Rag.Sandbox.Services;
 
 public sealed class RagSandboxStore
 {
-    private readonly LocalHashingRagEmbeddingGenerator embeddingGenerator;
-    private readonly List<RagSandboxCollectionState> collections = [];
+    private readonly IRagEmbeddingGenerator embeddingGenerator;
+    private readonly RagSandboxSimilarityCalculator similarityCalculator;
+    private readonly TimeProvider timeProvider;
+    private readonly List<RagSandboxCollectionState> collections;
+    private readonly SemaphoreSlim vectorGate = new(1, 1);
+
+    public RagSandboxStore(
+        IRagEmbeddingGenerator embeddingGenerator,
+        RagSandboxSimilarityCalculator similarityCalculator,
+        TimeProvider timeProvider)
+    {
+        this.embeddingGenerator = embeddingGenerator
+            ?? throw new ArgumentNullException(nameof(embeddingGenerator));
+        this.similarityCalculator = similarityCalculator
+            ?? throw new ArgumentNullException(nameof(similarityCalculator));
+        this.timeProvider = timeProvider
+            ?? throw new ArgumentNullException(nameof(timeProvider));
+        collections = RagSandboxSeedData.Create(timeProvider.GetUtcNow());
+    }
 
     public RagDriverCapabilities Capabilities { get; } = RagDriverCapabilities.WithTags;
 
     public bool SupportsRecordTags => Capabilities.SupportsTags;
-
-    public RagSandboxStore()
-    {
-        embeddingGenerator = new LocalHashingRagEmbeddingGenerator(new LocalHashingRagEmbeddingOptions
-        {
-            Dimension = 384
-        });
-
-        Seed();
-    }
 
     public IReadOnlyList<RagSandboxCollectionSummary> SearchCollections(string? query)
     {
@@ -31,7 +38,7 @@ public sealed class RagSandboxStore
                 || Normalize(collection.Description).Contains(normalizedQuery, StringComparison.Ordinal)
                 || collection.Tags.Any(tag => Normalize(tag).Contains(normalizedQuery, StringComparison.Ordinal)))
             .OrderBy(collection => collection.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(ToSummary)
+            .Select(RagSandboxProjection.ToSummary)
             .ToArray();
     }
 
@@ -39,15 +46,18 @@ public sealed class RagSandboxStore
     {
         return collections
             .Where(collection => string.Equals(collection.Name, collectionName, StringComparison.OrdinalIgnoreCase))
-            .Select(ToSummary)
+            .Select(RagSandboxProjection.ToSummary)
             .FirstOrDefault();
     }
 
-    public async ValueTask<RagSandboxCollectionSummary> SaveCollectionAsync(
+    public ValueTask<RagSandboxCollectionSummary> SaveCollectionAsync(
         RagSandboxCollectionEditModel edit,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(edit);
+        cancellationToken.ThrowIfCancellationRequested();
         edit.Validate();
+
         var normalizedName = edit.Name.Trim();
         var originalName = string.IsNullOrWhiteSpace(edit.OriginalName)
             ? normalizedName
@@ -74,12 +84,14 @@ public sealed class RagSandboxStore
                     CollectionName = normalizedName,
                     VectorSize = edit.VectorSize,
                     Distance = edit.Distance
-                }
+                },
+                UpdatedAt = timeProvider.GetUtcNow()
             };
             collections.Add(existing);
         }
         else
         {
+            var vectorSizeChanged = existing.Options.VectorSize != edit.VectorSize;
             existing.Name = normalizedName;
             existing.Description = edit.Description.Trim();
             existing.Tags = edit.Tags.ToList();
@@ -89,23 +101,22 @@ public sealed class RagSandboxStore
                 VectorSize = edit.VectorSize,
                 Distance = edit.Distance
             };
+
+            if (vectorSizeChanged)
+            {
+                InvalidateVectors(existing);
+            }
+
+            existing.UpdatedAt = timeProvider.GetUtcNow();
         }
 
-        existing.UpdatedAt = DateTimeOffset.Now;
-        await RebuildVectorsAsync(existing, cancellationToken).ConfigureAwait(false);
-        return ToSummary(existing);
+        return ValueTask.FromResult(RagSandboxProjection.ToSummary(existing));
     }
 
     public bool DeleteCollection(string collectionName)
     {
         var collection = FindCollection(collectionName);
-        if (collection is null)
-        {
-            return false;
-        }
-
-        collections.Remove(collection);
-        return true;
+        return collection is not null && collections.Remove(collection);
     }
 
     public IReadOnlyList<RagSandboxRecordSummary> GetRecords(string collectionName)
@@ -118,7 +129,7 @@ public sealed class RagSandboxStore
 
         return collection.Records
             .OrderBy(record => record.Id, StringComparer.OrdinalIgnoreCase)
-            .Select(record => ToRecordSummary(record, score: null))
+            .Select(record => RagSandboxProjection.ToRecordSummary(record, score: null))
             .ToArray();
     }
 
@@ -128,25 +139,29 @@ public sealed class RagSandboxStore
         var record = collection?.Records.FirstOrDefault(candidate =>
             string.Equals(candidate.Id, recordId, StringComparison.OrdinalIgnoreCase));
 
-        return record is null ? null : ToRecordSummary(record, score: null);
+        return record is null
+            ? null
+            : RagSandboxProjection.ToRecordSummary(record, score: null);
     }
 
-    public async ValueTask<RagSandboxRecordSummary> SaveRecordAsync(
+    public ValueTask<RagSandboxRecordSummary> SaveRecordAsync(
         string collectionName,
         RagSandboxRecordEditModel edit,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(edit);
+        cancellationToken.ThrowIfCancellationRequested();
         edit.Validate();
+
         var collection = FindCollection(collectionName)
             ?? throw new InvalidOperationException($"Collection '{collectionName}' was not found.");
-
-        var existing = collection.Records.FirstOrDefault(record =>
-            string.Equals(record.Id, string.IsNullOrWhiteSpace(edit.OriginalId) ? edit.Id : edit.OriginalId, StringComparison.OrdinalIgnoreCase));
 
         var normalizedId = edit.Id.Trim();
         var originalId = string.IsNullOrWhiteSpace(edit.OriginalId)
             ? normalizedId
             : edit.OriginalId.Trim();
+        var existing = collection.Records.FirstOrDefault(record =>
+            string.Equals(record.Id, originalId, StringComparison.OrdinalIgnoreCase));
 
         if (edit.Tags.Count > 0 && !SupportsRecordTags)
         {
@@ -163,7 +178,8 @@ public sealed class RagSandboxStore
         {
             existing = new RagSandboxRecordState
             {
-                Id = normalizedId
+                Id = normalizedId,
+                UpdatedAt = timeProvider.GetUtcNow()
             };
             collection.Records.Add(existing);
         }
@@ -172,11 +188,11 @@ public sealed class RagSandboxStore
         existing.Text = edit.Text.Trim();
         existing.Metadata = edit.Metadata.Trim();
         existing.Tags = edit.Tags.ToList();
-        existing.UpdatedAt = DateTimeOffset.Now;
-        existing.Vector = await GenerateVectorAsync(collection, existing.Text, cancellationToken).ConfigureAwait(false);
-        collection.UpdatedAt = DateTimeOffset.Now;
+        existing.UpdatedAt = timeProvider.GetUtcNow();
+        existing.Vector = null;
+        collection.UpdatedAt = timeProvider.GetUtcNow();
 
-        return ToRecordSummary(existing, score: null);
+        return ValueTask.FromResult(RagSandboxProjection.ToRecordSummary(existing, score: null));
     }
 
     public bool DeleteRecord(string collectionName, string recordId)
@@ -191,7 +207,7 @@ public sealed class RagSandboxStore
         }
 
         collection.Records.Remove(record);
-        collection.UpdatedAt = DateTimeOffset.Now;
+        collection.UpdatedAt = timeProvider.GetUtcNow();
         return true;
     }
 
@@ -212,9 +228,13 @@ public sealed class RagSandboxStore
             return GetRecords(collectionName);
         }
 
-        var vector = await GenerateVectorAsync(collection, query, cancellationToken).ConfigureAwait(false);
+        await EnsureVectorsAsync(collection, cancellationToken).ConfigureAwait(false);
+        var queryVector = await GenerateVectorAsync(collection, query, cancellationToken).ConfigureAwait(false);
+
         return collection.Records
-            .Select(record => ToRecordSummary(record, CosineSimilarity(vector, record.Vector)))
+            .Select(record => RagSandboxProjection.ToRecordSummary(
+                record,
+                similarityCalculator.Calculate(queryVector, record.Vector!)))
             .OrderByDescending(record => record.Score ?? 0)
             .ThenBy(record => record.Id, StringComparer.OrdinalIgnoreCase)
             .Take(Math.Clamp(limit, 1, 50))
@@ -234,30 +254,31 @@ public sealed class RagSandboxStore
             return [];
         }
 
-        var selectedNames = collectionNames
+        var selectedCollections = collectionNames
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(FindCollection)
+            .OfType<RagSandboxCollectionState>()
             .ToArray();
 
+        var queryVectors = new Dictionary<int, float[]>();
         var hits = new List<RagSandboxSearchHit>();
-        foreach (var collectionName in selectedNames)
+
+        foreach (var collection in selectedCollections)
         {
-            var collection = FindCollection(collectionName);
-            if (collection is null)
+            await EnsureVectorsAsync(collection, cancellationToken).ConfigureAwait(false);
+
+            if (!queryVectors.TryGetValue(collection.Options.VectorSize, out var queryVector))
             {
-                continue;
+                queryVector = await GenerateVectorAsync(collection, query, cancellationToken).ConfigureAwait(false);
+                queryVectors.Add(collection.Options.VectorSize, queryVector);
             }
 
-            var vector = await GenerateVectorAsync(collection, query, cancellationToken).ConfigureAwait(false);
             hits.AddRange(collection.Records.Select(record =>
-                new RagSandboxSearchHit(
-                    collection.Name,
-                    record.Id,
-                    record.Text,
-                    record.Metadata,
-                    record.Tags.ToArray(),
-                    CosineSimilarity(vector, record.Vector),
-                    record.UpdatedAt)));
+                RagSandboxProjection.ToSearchHit(
+                    collection,
+                    record,
+                    similarityCalculator.Calculate(queryVector, record.Vector!))));
         }
 
         return hits
@@ -274,13 +295,28 @@ public sealed class RagSandboxStore
             string.Equals(collection.Name, collectionName, StringComparison.OrdinalIgnoreCase));
     }
 
-    private async ValueTask RebuildVectorsAsync(
+    private async ValueTask EnsureVectorsAsync(
         RagSandboxCollectionState collection,
         CancellationToken cancellationToken)
     {
-        foreach (var record in collection.Records)
+        if (collection.Records.All(record => HasExpectedVector(record, collection.Options.VectorSize)))
         {
-            record.Vector = await GenerateVectorAsync(collection, record.Text, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await vectorGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            foreach (var record in collection.Records.Where(
+                         record => !HasExpectedVector(record, collection.Options.VectorSize)))
+            {
+                record.Vector = await GenerateVectorAsync(collection, record.Text, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            vectorGate.Release();
         }
     }
 
@@ -296,221 +332,17 @@ public sealed class RagSandboxStore
         return embedding.Vector;
     }
 
-    private void Seed()
+    private static bool HasExpectedVector(RagSandboxRecordState record, int expectedSize)
+        => record.Vector is { Length: > 0 } vector && vector.Length == expectedSize;
+
+    private static void InvalidateVectors(RagSandboxCollectionState collection)
     {
-        collections.Add(new RagSandboxCollectionState
+        foreach (var record in collection.Records)
         {
-            Name = "finance-policies",
-            Description = "Operational policies used when answering invoice and vendor questions.",
-            Tags = ["finance", "policy"],
-            Options = new RagCollectionOptions
-            {
-                CollectionName = "finance-policies",
-                VectorSize = 64,
-                Distance = RagDistanceMetric.Cosine
-            },
-            Records =
-            {
-                new RagSandboxRecordState
-                {
-                    Id = "invoice-approval",
-                    Text = "Invoices over 5000 require manager approval before payment.",
-                    Metadata = "source=finance-policy; owner=accounts-payable",
-                    Tags = ["approval", "invoice"]
-                },
-                new RagSandboxRecordState
-                {
-                    Id = "vendor-terms",
-                    Text = "Standard vendor payment terms are net 30 unless the contract overrides them.",
-                    Metadata = "source=vendor-policy; owner=procurement",
-                    Tags = ["vendor", "payment"]
-                }
-            }
-        });
-
-        collections.Add(new RagSandboxCollectionState
-        {
-            Name = "support-runbooks",
-            Description = "Support knowledge for triage, escalation, and service recovery.",
-            Tags = ["support", "runbook"],
-            Options = new RagCollectionOptions
-            {
-                CollectionName = "support-runbooks",
-                VectorSize = 64,
-                Distance = RagDistanceMetric.Cosine
-            },
-            Records =
-            {
-                new RagSandboxRecordState
-                {
-                    Id = "qdrant-grpc-port",
-                    Text = "Qdrant .NET client connects through gRPC and expects port 6334 to be reachable.",
-                    Metadata = "source=rag-sandbox; service=qdrant",
-                    Tags = ["qdrant", "connectivity"]
-                }
-            }
-        });
-
-        foreach (var collection in collections)
-        {
-            RebuildVectorsAsync(collection, CancellationToken.None).AsTask().GetAwaiter().GetResult();
+            record.Vector = null;
         }
-    }
-
-    private static RagSandboxCollectionSummary ToSummary(RagSandboxCollectionState collection)
-    {
-        return new RagSandboxCollectionSummary(
-            collection.Name,
-            collection.Description,
-            collection.Tags.ToArray(),
-            collection.Options.VectorSize,
-            collection.Options.Distance,
-            collection.Records.Count,
-            collection.UpdatedAt);
-    }
-
-    private static RagSandboxRecordSummary ToRecordSummary(
-        RagSandboxRecordState record,
-        double? score)
-    {
-        return new RagSandboxRecordSummary(
-            record.Id,
-            record.Text,
-            record.Metadata,
-            record.Tags.ToArray(),
-            score,
-            record.UpdatedAt);
-    }
-
-    private static double CosineSimilarity(IReadOnlyList<float> left, IReadOnlyList<float> right)
-    {
-        var length = Math.Min(left.Count, right.Count);
-        if (length == 0)
-        {
-            return 0;
-        }
-
-        var dot = 0.0d;
-        var leftMagnitude = 0.0d;
-        var rightMagnitude = 0.0d;
-
-        for (var index = 0; index < length; index++)
-        {
-            dot += left[index] * right[index];
-            leftMagnitude += left[index] * left[index];
-            rightMagnitude += right[index] * right[index];
-        }
-
-        if (leftMagnitude <= 0 || rightMagnitude <= 0)
-        {
-            return 0;
-        }
-
-        return dot / (Math.Sqrt(leftMagnitude) * Math.Sqrt(rightMagnitude));
     }
 
     private static string Normalize(string? value)
         => (value ?? string.Empty).Trim().ToLowerInvariant();
-
-    private sealed class RagSandboxCollectionState
-    {
-        public required string Name { get; set; }
-
-        public string Description { get; set; } = string.Empty;
-
-        public List<string> Tags { get; set; } = [];
-
-        public required RagCollectionOptions Options { get; set; }
-
-        public List<RagSandboxRecordState> Records { get; init; } = [];
-
-        public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.Now;
-    }
-
-    private sealed class RagSandboxRecordState
-    {
-        public required string Id { get; set; }
-
-        public string Text { get; set; } = string.Empty;
-
-        public string Metadata { get; set; } = string.Empty;
-
-        public List<string> Tags { get; set; } = [];
-
-        public float[] Vector { get; set; } = [];
-
-        public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.Now;
-    }
-}
-
-public sealed record RagSandboxCollectionSummary(
-    string Name,
-    string Description,
-    IReadOnlyList<string> Tags,
-    int VectorSize,
-    RagDistanceMetric Distance,
-    int RecordCount,
-    DateTimeOffset UpdatedAt);
-
-public sealed record RagSandboxRecordSummary(
-    string Id,
-    string Text,
-    string Metadata,
-    IReadOnlyList<string> Tags,
-    double? Score,
-    DateTimeOffset UpdatedAt);
-
-public sealed record RagSandboxSearchHit(
-    string CollectionName,
-    string RecordId,
-    string Text,
-    string Metadata,
-    IReadOnlyList<string> Tags,
-    double Score,
-    DateTimeOffset UpdatedAt);
-
-public sealed class RagSandboxCollectionEditModel
-{
-    public string? OriginalName { get; set; }
-
-    public string Name { get; set; } = string.Empty;
-
-    public string Description { get; set; } = string.Empty;
-
-    public IReadOnlyList<string> Tags { get; set; } = Array.Empty<string>();
-
-    public int VectorSize { get; set; } = 64;
-
-    public RagDistanceMetric Distance { get; set; } = RagDistanceMetric.Cosine;
-
-    public void Validate()
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(Name);
-        ArgumentNullException.ThrowIfNull(Tags);
-
-        if (VectorSize <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(VectorSize), "Vector size must be greater than zero.");
-        }
-    }
-}
-
-public sealed class RagSandboxRecordEditModel
-{
-    public string? OriginalId { get; set; }
-
-    public string Id { get; set; } = string.Empty;
-
-    public string Text { get; set; } = string.Empty;
-
-    public string Metadata { get; set; } = string.Empty;
-
-    public IReadOnlyList<string> Tags { get; set; } = Array.Empty<string>();
-
-    public void Validate()
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(Id);
-        ArgumentException.ThrowIfNullOrWhiteSpace(Text);
-        ArgumentNullException.ThrowIfNull(Tags);
-    }
 }

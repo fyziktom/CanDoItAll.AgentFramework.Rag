@@ -6,7 +6,5 @@ public interface IRagDriverProvider
 {
     string ProviderName { get; }
 
-    IRagDriver Create(
-        RagDriverFactoryOptions options,
-        IServiceProvider serviceProvider);
+    IRagDriver Create(RagDriverFactoryOptions options);
 }

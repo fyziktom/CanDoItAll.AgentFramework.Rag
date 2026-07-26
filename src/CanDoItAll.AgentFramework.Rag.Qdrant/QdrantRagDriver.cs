@@ -10,6 +10,8 @@ namespace CanDoItAll.AgentFramework.Rag.Qdrant;
 
 public sealed class QdrantRagDriver : RagDriverBase
 {
+    public const string ProviderIdentifier = "qdrant";
+
     private readonly QdrantClient _client;
     private readonly QdrantRagOptions _options;
 
@@ -19,7 +21,7 @@ public sealed class QdrantRagDriver : RagDriverBase
         RagCollectionOptions defaultCollection,
         QdrantRagOptions? options = null)
         : base(
-            RagDriverProviderNames.Qdrant,
+            ProviderIdentifier,
             defaultCollection,
             embeddingGenerator,
             RagDriverCapabilities.WithTagsAndProjectionControls)
@@ -49,7 +51,7 @@ public sealed class QdrantRagDriver : RagDriverBase
             {
                 await _client.CreateCollectionAsync(
                         effectiveCollection.CollectionName,
-                        QdrantRagMapper.ToVectorParams(effectiveCollection),
+                        QdrantCollectionMapper.ToVectorParams(effectiveCollection),
                         cancellationToken: cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -63,7 +65,7 @@ public sealed class QdrantRagDriver : RagDriverBase
                 cancellationToken)
             .ConfigureAwait(false);
         var actual = info.Config?.Params?.VectorsConfig?.Params;
-        var expected = QdrantRagMapper.ToVectorParams(effectiveCollection);
+        var expected = QdrantCollectionMapper.ToVectorParams(effectiveCollection);
         if (actual is null || actual.Size != expected.Size || actual.Distance != expected.Distance)
         {
             throw new InvalidOperationException(
@@ -83,7 +85,7 @@ public sealed class QdrantRagDriver : RagDriverBase
         foreach (var entry in request.Entries)
         {
             var vector = await ResolveEntryVectorAsync(entry, collection, cancellationToken).ConfigureAwait(false);
-            points.Add(QdrantRagMapper.ToPointStruct(entry, vector));
+            points.Add(QdrantPointMapper.ToPointStruct(entry, vector));
         }
 
         var result = await _client.UpsertAsync(
@@ -106,7 +108,7 @@ public sealed class QdrantRagDriver : RagDriverBase
         var collection = ResolveCollection(request.CollectionName);
         request.Validate();
 
-        var ids = request.KnowledgeIds.Select(QdrantRagMapper.ToPointId).ToArray();
+        var ids = request.KnowledgeIds.Select(QdrantPointIdMapper.ToPointId).ToArray();
         var result = await _client.DeleteAsync(
                 collection.CollectionName,
                 ids,
@@ -129,7 +131,7 @@ public sealed class QdrantRagDriver : RagDriverBase
 
         var result = await _client.DeleteAsync(
                 collection.CollectionName,
-                QdrantRagMapper.ToFilter(request.Filter),
+                QdrantFilterMapper.ToFilter(request.Filter),
                 wait: _options.WaitForWrites,
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
@@ -147,7 +149,7 @@ public sealed class QdrantRagDriver : RagDriverBase
         var collection = ResolveCollection(request.CollectionName);
         request.Validate();
 
-        var expectedSchema = QdrantRagMapper.ToPayloadSchemaType(request.IndexKind);
+        var expectedSchema = QdrantPayloadIndexMapper.ToPayloadSchemaType(request.IndexKind);
         var info = await _client.GetCollectionInfoAsync(collection.CollectionName, cancellationToken)
             .ConfigureAwait(false);
         if (info.PayloadSchema.TryGetValue(request.FieldName, out var existingSchema))
@@ -165,7 +167,7 @@ public sealed class QdrantRagDriver : RagDriverBase
                 collection.CollectionName,
                 request.FieldName,
                 expectedSchema,
-                QdrantRagMapper.ToPayloadIndexParams(request.IndexKind),
+                QdrantPayloadIndexMapper.ToPayloadIndexParams(request.IndexKind),
                 wait: _options.WaitForWrites,
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
@@ -201,14 +203,14 @@ public sealed class QdrantRagDriver : RagDriverBase
         var points = await _client.SearchAsync(
                 collection.CollectionName,
                 vector,
-                filter: request.Filter is null ? null : QdrantRagMapper.ToFilter(request.Filter),
+                filter: request.Filter is null ? null : QdrantFilterMapper.ToFilter(request.Filter),
                 limit: (ulong)request.Limit,
                 payloadSelector: true,
                 scoreThreshold: request.MinScore is null ? null : (float)request.MinScore.Value,
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
-        return points.Select(QdrantRagMapper.ToSearchResult).ToArray();
+        return points.Select(QdrantPointMapper.ToSearchResult).ToArray();
     }
 
 }

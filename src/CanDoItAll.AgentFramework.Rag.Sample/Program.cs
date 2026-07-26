@@ -1,4 +1,5 @@
 using CanDoItAll.AgentFramework.Rag.Driver.Abstractions;
+using CanDoItAll.AgentFramework.Rag.Driver.DependencyInjection;
 using CanDoItAll.AgentFramework.Rag.Driver.Models;
 using CanDoItAll.AgentFramework.Rag.Qdrant.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,6 +12,7 @@ var qdrantApiKey = Environment.GetEnvironmentVariable("QDRANT_API_KEY");
 var dryRun = args.Any(argument => string.Equals(argument, "--dry-run", StringComparison.OrdinalIgnoreCase));
 
 var services = new ServiceCollection();
+services.AddLocalHashingRagEmbeddingGenerator(options => options.Dimension = vectorSize);
 services.AddQdrantRagDriver(
     configureQdrant: options =>
     {
@@ -26,8 +28,7 @@ services.AddQdrantRagDriver(
             VectorSize = vectorSize,
             Distance = RagDistanceMetric.Cosine
         };
-    },
-    configureEmbedding: options => options.Dimension = vectorSize);
+    });
 
 using var provider = services.BuildServiceProvider();
 var driver = provider.GetRequiredService<IRagDriverFactory>().Create();

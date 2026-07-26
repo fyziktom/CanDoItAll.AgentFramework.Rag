@@ -1,3 +1,4 @@
+using CanDoItAll.AgentFramework.Rag.Driver.DependencyInjection;
 using CanDoItAll.AgentFramework.Rag.Sandbox.Components;
 using CanDoItAll.AgentFramework.Rag.Sandbox.Services;
 using CanDoItAll.Components.BaseLib;
@@ -7,6 +8,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddCanDoItAllBaseLib();
+builder.Services.AddLocalHashingRagEmbeddingGenerator(options => options.Dimension = 384);
+builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddSingleton<RagSandboxSimilarityCalculator>();
 builder.Services.AddScoped<RagSandboxStore>();
 
 var app = builder.Build();

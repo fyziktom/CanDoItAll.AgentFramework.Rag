@@ -1,0 +1,194 @@
+@page "/"
+@page "/collections"
+@inject NavigationManager Navigation
+@inject RagSandboxStore Store
+
+<PageTitle>Collections · RAG Sandbox</PageTitle>
+
+<PageScaffold Mode="PageScaffoldMode.FocusWorkbench">
+    <Header>
+        <PageHeader Eyebrow="RAG sandbox"
+                    Title="Collections"
+                    Description="Manage collection identity, vector settings, and tags."
+                    Compact="true">
+            <Stats>
+                <Cluster Gap="LayoutGap.Small" Wrap="FlexWrap.Wrap">
+                    <StatusBadge Text="@($"{AllCollections.Count} collections")" Tone="info" />
+                    <StatusBadge Text="@($"{TotalRecordCount} records")" Tone="success" />
+                    <StatusBadge Text="@lastAction" Tone="@LastActionTone" />
+                </Cluster>
+            </Stats>
+            <Actions>
+                <Button Text="New collection"
+                        Icon="add"
+                        Click="OpenNewCollectionDialog"
+                        data-testid="collection-add" />
+            </Actions>
+        </PageHeader>
+    </Header>
+
+    <ChildContent>
+        <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+            @if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                <Alert AlertStyle="AlertStyle.Danger">
+                    <strong>Action failed.</strong> @errorMessage
+                </Alert>
+            }
+
+            <SectionCard Title="Collection registry"
+                         Description="Search, compare, and maintain the collections available to records and similarity search.">
+                <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+                    <Stack Orientation="Orientation.Horizontal"
+                           GapScale="LayoutGap.Small"
+                           AlignItems="AlignItems.End"
+                           Wrap="FlexWrap.Wrap">
+                        <FormField Text="Search collections">
+                            <TextBox Immediate="true"
+                                     Placeholder="Name, description, or tag"
+                                     @bind-Value="collectionSearch"
+                                     data-testid="collection-search" />
+                        </FormField>
+                        <Button Text="Add collection"
+                                Icon="add"
+                                Click="OpenNewCollectionDialog"
+                                data-testid="collection-add-inline" />
+                    </Stack>
+
+                    <DataGrid TItem="RagSandboxCollectionSummary"
+                              Data="@FilteredCollections"
+                              AllowPaging="true"
+                              PageSize="8"
+                              Caption="RAG collections"
+                              EmptyText="No collections match the current search."
+                              data-testid="collection-grid">
+                        <Columns>
+                            <DataGridColumn TItem="RagSandboxCollectionSummary" Title="Collection">
+                                <Template Context="collection">
+                                    <Stack GapScale="LayoutGap.Tiny">
+                                        <TextBlock TextStyle="TextStyle.Subtitle2" Value="@collection.Name" />
+                                        <TextBlock TextStyle="TextStyle.Note" Value="@collection.Description" />
+                                    </Stack>
+                                </Template>
+                            </DataGridColumn>
+                            <DataGridColumn TItem="RagSandboxCollectionSummary" Title="Tags">
+                                <Template Context="collection">
+                                    <TagBadges Tags="@collection.Tags" />
+                                </Template>
+                            </DataGridColumn>
+                            <DataGridColumn TItem="RagSandboxCollectionSummary" Title="Vectors">
+                                <Template Context="collection">
+                                    <Stack GapScale="LayoutGap.Tiny">
+                                        <StatusBadge Text="@($"{collection.VectorSize} dimensions")" Tone="info" />
+                                        <TextBlock TextStyle="TextStyle.Note" Value="@collection.Distance.ToString()" />
+                                    </Stack>
+                                </Template>
+                            </DataGridColumn>
+                            <DataGridColumn TItem="RagSandboxCollectionSummary" Title="Records" Property="RecordCount" />
+                            <DataGridColumn TItem="RagSandboxCollectionSummary" Title="Actions">
+                                <Template Context="collection">
+                                    <Stack Orientation="Orientation.Horizontal"
+                                           GapScale="LayoutGap.Small"
+                                           Wrap="FlexWrap.Wrap">
+                                        <Button Text="Records"
+                                                Icon="list"
+                                                Size="ButtonSize.Small"
+                                                ButtonStyle="ButtonStyle.Light"
+                                                Click="@(() => OpenRecords(collection.Name))" />
+                                        <Button Text="Edit"
+                                                Icon="edit"
+                                                Size="ButtonSize.Small"
+                                                ButtonStyle="ButtonStyle.Light"
+                                                Click="@(() => OpenEditCollectionDialog(collection))" />
+                                        <Button Text="Delete"
+                                                Icon="delete"
+                                                Size="ButtonSize.Small"
+                                                ButtonStyle="ButtonStyle.Danger"
+                                                Variant="Variant.Outlined"
+                                                Click="@(() => DeleteCollection(collection.Name))" />
+                                    </Stack>
+                                </Template>
+                            </DataGridColumn>
+                        </Columns>
+                    </DataGrid>
+                </Stack>
+            </SectionCard>
+        </Stack>
+    </ChildContent>
+</PageScaffold>
+
+<Dialog IsOpen="@isCollectionDialogOpen"
+        Title="@CollectionDialogTitle"
+        Subtitle="Collection settings and tags define storage and search behavior."
+        Size="ModalSize.Compact"
+        DenseChrome="true"
+        OnClose="CloseCollectionDialogAsync"
+        TestId="collection-dialog">
+    <ChildContent>
+        <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+            @if (!string.IsNullOrWhiteSpace(collectionDialogError))
+            {
+                <Alert AlertStyle="AlertStyle.Danger">
+                    <strong>Collection could not be saved.</strong> @collectionDialogError
+                </Alert>
+            }
+
+            <FormRow Split="true">
+                <FormField Text="Collection name">
+                    <TextBox Immediate="true"
+                             Placeholder="finance-policies"
+                             @bind-Value="collectionName"
+                             data-testid="collection-name" />
+                </FormField>
+                <FormField Text="Vector size">
+                    <TextBox Immediate="true"
+                             Placeholder="64"
+                             @bind-Value="collectionVectorSize"
+                             data-testid="collection-vector-size" />
+                </FormField>
+            </FormRow>
+
+            <FormField Text="Distance metric">
+                <DropDown TValue="RagDistanceMetric"
+                          Data="@DistanceOptions"
+                          @bind-Value="collectionDistance"
+                          data-testid="collection-distance" />
+            </FormField>
+
+            <FormField Text="Description">
+                <TextArea Rows="4"
+                          Immediate="true"
+                          Placeholder="Operational knowledge for retrieval."
+                          @bind-Value="collectionDescription"
+                          data-testid="collection-description" />
+            </FormField>
+
+            <FormField Text="Tags">
+                <TagEditor Value="@collectionTags"
+                           ValueChanged="HandleCollectionTagsChangedAsync"
+                           Suggestions="@CollectionTagSuggestions"
+                           Placeholder="Add collection tag"
+                           MaxTags="12"
+                           TestId="collection-tags"
+                           InputTestId="collection-tags-input" />
+            </FormField>
+        </Stack>
+    </ChildContent>
+    <Footer>
+        <Stack Orientation="Orientation.Horizontal"
+               GapScale="LayoutGap.Small"
+               JustifyContent="JustifyContent.End"
+               Wrap="FlexWrap.Wrap">
+            <Button Text="Cancel"
+                    Icon="close"
+                    ButtonStyle="ButtonStyle.Light"
+                    Disabled="@isCollectionSaving"
+                    Click="CloseCollectionDialogAsync" />
+            <Button Text="@CollectionSaveText"
+                    Icon="save"
+                    IsBusy="@isCollectionSaving"
+                    Click="SaveCollectionAsync"
+                    data-testid="collection-save" />
+        </Stack>
+    </Footer>
+</Dialog>

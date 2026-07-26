@@ -1,0 +1,263 @@
+@page "/records"
+@inject NavigationManager Navigation
+@inject RagSandboxStore Store
+
+<PageTitle>Records · RAG Sandbox</PageTitle>
+
+<PageScaffold Mode="PageScaffoldMode.FocusWorkbench">
+    <Header>
+        <PageHeader Eyebrow="RAG sandbox"
+                    Title="Records"
+                    Description="Browse a collection and maintain the knowledge records it exposes to retrieval."
+                    Compact="true">
+            <Stats>
+                <Cluster Gap="LayoutGap.Small" Wrap="FlexWrap.Wrap">
+                    <StatusBadge Text="@($"{AllCollections.Count} collections")" Tone="info" />
+                    <StatusBadge Text="@($"{TotalRecordCount} records")" Tone="success" />
+                    <StatusBadge Text="@SelectedCollectionLabel" Tone="neutral" />
+                    <StatusBadge Text="@lastAction" Tone="@LastActionTone" />
+                </Cluster>
+            </Stats>
+            <Actions>
+                <Button Text="New record"
+                        Icon="note_add"
+                        Disabled="@(!HasSelectedCollection)"
+                        Click="OpenNewRecordDialog"
+                        data-testid="record-add" />
+            </Actions>
+        </PageHeader>
+    </Header>
+
+    <ChildContent>
+        <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+            @if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                <Alert AlertStyle="AlertStyle.Danger">
+                    <strong>Action failed.</strong> @errorMessage
+                </Alert>
+            }
+
+            <ListDetailShell Dense="true" ListPaneWidth="18rem">
+                <ListHeader>
+                    <Stack GapScale="LayoutGap.Tiny">
+                        <TextBlock TextStyle="TextStyle.Subtitle2" Value="Collections" />
+                        <TextBlock TextStyle="TextStyle.Note" Value="Choose a record workspace." />
+                    </Stack>
+                </ListHeader>
+                <ListContent>
+                    @if (AllCollections.Count == 0)
+                    {
+                        <EmptyState Eyebrow="Collections"
+                                    Title="No collections"
+                                    Description="Create a collection before adding records." />
+                    }
+                    else
+                    {
+                        <Stack GapScale="LayoutGap.Small" AlignItems="AlignItems.Stretch">
+                            @foreach (var collection in AllCollections)
+                            {
+                                <SelectionListItem @key="collection.Name"
+                                                   Title="@collection.Name"
+                                                   Meta="@($"{collection.RecordCount} records")"
+                                                   Summary="@collection.Description"
+                                                   Dense="true"
+                                                   Disabled="@isRecordSearching"
+                                                   IsSelected="@IsSelectedCollection(collection.Name)"
+                                                   OnSelect="@(() => NavigateToCollection(collection.Name))"
+                                                   DataTestId="@SandboxTestIds.ForCollection("record-collection-rail-item", collection.Name)">
+                                    <Status>
+                                        <StatusBadge Text="@($"{collection.VectorSize}d")" Tone="info" />
+                                    </Status>
+                                </SelectionListItem>
+                            }
+                        </Stack>
+                    }
+                </ListContent>
+                <DetailHeader>
+                    <Split Breakpoint="LayoutBreakpoint.None"
+                           Gap="LayoutGap.Medium"
+                           AlignItems="AlignItems.Start"
+                           JustifyContent="JustifyContent.SpaceBetween"
+                           Wrap="FlexWrap.Wrap">
+                        <Stack GapScale="LayoutGap.Tiny">
+                            <TextBlock TextStyle="TextStyle.Subtitle2" Value="@RecordsPanelTitle" />
+                            <TextBlock TextStyle="TextStyle.Note" Value="@RecordsPanelDescription" />
+                        </Stack>
+                        <Button Text="Add record"
+                                Icon="note_add"
+                                Size="ButtonSize.Small"
+                                ButtonStyle="ButtonStyle.Light"
+                                Disabled="@(!HasSelectedCollection)"
+                                Click="OpenNewRecordDialog"
+                                data-testid="record-add-inline" />
+                    </Split>
+                </DetailHeader>
+                <DetailContent>
+                    @if (!HasSelectedCollection)
+                    {
+                        <EmptyState Eyebrow="Records"
+                                    Title="No collection selected"
+                                    Description="Select or create a collection before editing records." />
+                    }
+                    else
+                    {
+                        <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+                            <Stack Orientation="Orientation.Horizontal"
+                                   GapScale="LayoutGap.Small"
+                                   AlignItems="AlignItems.End"
+                                   Wrap="FlexWrap.Wrap">
+                                <FormField Text="Search records">
+                                    <TextBox Immediate="true"
+                                             Placeholder="approval, payment, Qdrant..."
+                                             @bind-Value="recordSearch"
+                                             data-testid="record-search" />
+                                </FormField>
+                                <Button Text="Search"
+                                        Icon="search"
+                                        IsBusy="@isRecordSearching"
+                                        Click="SearchRecordsAsync"
+                                        data-testid="record-search-button" />
+                                <Button Text="Show all"
+                                        Icon="list"
+                                        ButtonStyle="ButtonStyle.Light"
+                                        Disabled="@isRecordSearching"
+                                        Click="ShowAllRecords" />
+                            </Stack>
+
+                            <DataGrid TItem="RagSandboxRecordSummary"
+                                      Data="@recordResults"
+                                      AllowPaging="true"
+                                      PageSize="8"
+                                      Caption="@RecordsPanelTitle"
+                                      Loading="@isRecordSearching"
+                                      LoadingText="Searching records..."
+                                      EmptyText="No records match the current search."
+                                      data-testid="record-grid">
+                                <Columns>
+                                    <DataGridColumn TItem="RagSandboxRecordSummary" Title="Record">
+                                        <Template Context="record">
+                                            <Stack GapScale="LayoutGap.Tiny">
+                                                <TextBlock TextStyle="TextStyle.Subtitle2" Value="@record.Id" />
+                                                <TextBlock TextStyle="TextStyle.Note" Value="@record.Text" />
+                                            </Stack>
+                                        </Template>
+                                    </DataGridColumn>
+                                    <DataGridColumn TItem="RagSandboxRecordSummary" Title="Tags">
+                                        <Template Context="record">
+                                            <TagBadges Tags="@record.Tags" />
+                                        </Template>
+                                    </DataGridColumn>
+                                    <DataGridColumn TItem="RagSandboxRecordSummary" Title="Metadata" Property="Metadata" />
+                                    <DataGridColumn TItem="RagSandboxRecordSummary" Title="Match">
+                                        <Template Context="record">
+                                            <StatusBadge Text="@FormatScore(record.Score)"
+                                                         TypedTone="@ResolveScoreTone(record.Score)" />
+                                        </Template>
+                                    </DataGridColumn>
+                                    <DataGridColumn TItem="RagSandboxRecordSummary" Title="Actions">
+                                        <Template Context="record">
+                                            <Stack Orientation="Orientation.Horizontal"
+                                                   GapScale="LayoutGap.Small"
+                                                   Wrap="FlexWrap.Wrap">
+                                                <Button Text="Edit"
+                                                        Icon="edit"
+                                                        Size="ButtonSize.Small"
+                                                        ButtonStyle="ButtonStyle.Light"
+                                                        Click="@(() => OpenEditRecordDialog(record))" />
+                                                <Button Text="Delete"
+                                                        Icon="delete"
+                                                        Size="ButtonSize.Small"
+                                                        ButtonStyle="ButtonStyle.Danger"
+                                                        Variant="Variant.Outlined"
+                                                        Click="@(() => DeleteRecord(record.Id))" />
+                                            </Stack>
+                                        </Template>
+                                    </DataGridColumn>
+                                </Columns>
+                            </DataGrid>
+                        </Stack>
+                    }
+                </DetailContent>
+            </ListDetailShell>
+        </Stack>
+    </ChildContent>
+</PageScaffold>
+
+<Dialog IsOpen="@isRecordDialogOpen"
+        Title="@RecordDialogTitle"
+        Subtitle="@RecordDialogSubtitle"
+        Size="ModalSize.Compact"
+        DenseChrome="true"
+        OnClose="CloseRecordDialogAsync"
+        TestId="record-dialog">
+    <ChildContent>
+        @if (!HasSelectedCollection)
+        {
+            <EmptyState Eyebrow="Records"
+                        Title="No collection selected"
+                        Description="Select a collection before adding a record." />
+        }
+        else
+        {
+            <Stack GapScale="LayoutGap.Medium" AlignItems="AlignItems.Stretch">
+                @if (!string.IsNullOrWhiteSpace(recordDialogError))
+                {
+                    <Alert AlertStyle="AlertStyle.Danger">
+                        <strong>Record could not be saved.</strong> @recordDialogError
+                    </Alert>
+                }
+
+                <FormField Text="Record id">
+                    <TextBox Immediate="true"
+                             Placeholder="invoice-approval"
+                             @bind-Value="recordId"
+                             data-testid="record-id" />
+                </FormField>
+
+                <FormField Text="Knowledge text">
+                    <TextArea Rows="6"
+                              Immediate="true"
+                              Placeholder="Knowledge content to embed and retrieve."
+                              @bind-Value="recordText"
+                              data-testid="record-text" />
+                </FormField>
+
+                <FormField Text="Metadata">
+                    <TextBox Immediate="true"
+                             Placeholder="source=policy; owner=team"
+                             @bind-Value="recordMetadata"
+                             data-testid="record-metadata" />
+                </FormField>
+
+                <FormField Text="Tags">
+                    <TagEditor Value="@recordTags"
+                               ValueChanged="HandleRecordTagsChangedAsync"
+                               Suggestions="@RecordTagSuggestions"
+                               Placeholder="Add record tag"
+                               Disabled="@(!Store.SupportsRecordTags)"
+                               MaxTags="12"
+                               TestId="record-tags"
+                               InputTestId="record-tags-input" />
+                </FormField>
+            </Stack>
+        }
+    </ChildContent>
+    <Footer>
+        <Stack Orientation="Orientation.Horizontal"
+               GapScale="LayoutGap.Small"
+               JustifyContent="JustifyContent.End"
+               Wrap="FlexWrap.Wrap">
+            <Button Text="Cancel"
+                    Icon="close"
+                    ButtonStyle="ButtonStyle.Light"
+                    Disabled="@isRecordSaving"
+                    Click="CloseRecordDialogAsync" />
+            <Button Text="@RecordSaveText"
+                    Icon="save"
+                    Disabled="@(!HasSelectedCollection)"
+                    IsBusy="@isRecordSaving"
+                    Click="SaveRecordAsync"
+                    data-testid="record-save" />
+        </Stack>
+    </Footer>
+</Dialog>

@@ -2,7 +2,6 @@ using CanDoItAll.AgentFramework.Rag.Driver.Abstractions;
 using CanDoItAll.AgentFramework.Rag.Driver.Embeddings;
 using CanDoItAll.AgentFramework.Rag.Driver.Factories;
 using CanDoItAll.AgentFramework.Rag.Driver.Models;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 namespace CanDoItAll.AgentFramework.Rag.Tests.Driver;
@@ -12,10 +11,9 @@ public sealed class RagDriverFactoryTests
     [Fact]
     public void Create_ReturnsProviderSelectedByOptions()
     {
-        var serviceProvider = new ServiceCollection().BuildServiceProvider();
         var options = Options.Create(new RagDriverFactoryOptions
         {
-            ProviderName = "fake",
+            ProviderName = "FAKE",
             DefaultCollection = new RagCollectionOptions
             {
                 CollectionName = "knowledge",
@@ -26,8 +24,7 @@ public sealed class RagDriverFactoryTests
         var expectedDriver = new FakeRagDriver(options.Value.DefaultCollection);
         var factory = new RagDriverFactory(
             options,
-            new[] { new FakeRagDriverProvider(expectedDriver) },
-            serviceProvider);
+            [new FakeRagDriverProvider("fake", expectedDriver)]);
 
         var driver = factory.Create();
 
@@ -37,28 +34,57 @@ public sealed class RagDriverFactoryTests
     [Fact]
     public void Create_ThrowsWhenProviderIsNotRegistered()
     {
-        var serviceProvider = new ServiceCollection().BuildServiceProvider();
         var factory = new RagDriverFactory(
             Options.Create(new RagDriverFactoryOptions { ProviderName = "missing" }),
-            Array.Empty<IRagDriverProvider>(),
-            serviceProvider);
+            Array.Empty<IRagDriverProvider>());
 
         var exception = Assert.Throws<InvalidOperationException>(() => factory.Create());
         Assert.Contains("missing", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Constructor_ThrowsWhenProviderNamesAreDuplicated()
+    {
+        var options = Options.Create(new RagDriverFactoryOptions { ProviderName = "fake" });
+        var driver = new FakeRagDriver(options.Value.DefaultCollection);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new RagDriverFactory(
+                options,
+                [
+                    new FakeRagDriverProvider("fake", driver),
+                    new FakeRagDriverProvider("FAKE", driver)
+                ]));
+
+        Assert.Contains("more than one", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("FAKE", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Constructor_ThrowsWhenDefaultProviderIsNotConfigured()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new RagDriverFactory(
+                Options.Create(new RagDriverFactoryOptions()),
+                Array.Empty<IRagDriverProvider>()));
+
+        Assert.Contains("provider name", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("configured", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class FakeRagDriverProvider : IRagDriverProvider
     {
         private readonly IRagDriver _driver;
 
-        public FakeRagDriverProvider(IRagDriver driver)
+        public FakeRagDriverProvider(string providerName, IRagDriver driver)
         {
+            ProviderName = providerName;
             _driver = driver;
         }
 
-        public string ProviderName => "fake";
+        public string ProviderName { get; }
 
-        public IRagDriver Create(RagDriverFactoryOptions options, IServiceProvider serviceProvider)
+        public IRagDriver Create(RagDriverFactoryOptions options)
         {
             return _driver;
         }

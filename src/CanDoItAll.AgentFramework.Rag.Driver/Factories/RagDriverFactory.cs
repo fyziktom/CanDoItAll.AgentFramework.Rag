@@ -7,22 +7,32 @@ namespace CanDoItAll.AgentFramework.Rag.Driver.Factories;
 public sealed class RagDriverFactory : IRagDriverFactory
 {
     private readonly RagDriverFactoryOptions _defaultOptions;
-    private readonly IReadOnlyList<IRagDriverProvider> _providers;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IReadOnlyDictionary<string, IRagDriverProvider> _providers;
 
     public RagDriverFactory(
         IOptions<RagDriverFactoryOptions> defaultOptions,
-        IEnumerable<IRagDriverProvider> providers,
-        IServiceProvider serviceProvider)
+        IEnumerable<IRagDriverProvider> providers)
     {
         ArgumentNullException.ThrowIfNull(defaultOptions);
         ArgumentNullException.ThrowIfNull(providers);
-        ArgumentNullException.ThrowIfNull(serviceProvider);
 
         _defaultOptions = defaultOptions.Value;
         _defaultOptions.Validate();
-        _providers = providers.ToArray();
-        _serviceProvider = serviceProvider;
+
+        var providerCatalog = new Dictionary<string, IRagDriverProvider>(StringComparer.OrdinalIgnoreCase);
+        foreach (var provider in providers)
+        {
+            ArgumentNullException.ThrowIfNull(provider);
+            ArgumentException.ThrowIfNullOrWhiteSpace(provider.ProviderName);
+
+            if (!providerCatalog.TryAdd(provider.ProviderName, provider))
+            {
+                throw new InvalidOperationException(
+                    $"More than one RAG driver provider is registered for '{provider.ProviderName}'.");
+            }
+        }
+
+        _providers = providerCatalog;
     }
 
     public IRagDriver Create(RagDriverFactoryOptions? options = null)
@@ -30,15 +40,12 @@ public sealed class RagDriverFactory : IRagDriverFactory
         var effectiveOptions = options ?? _defaultOptions;
         effectiveOptions.Validate();
 
-        var provider = _providers.FirstOrDefault(candidate =>
-            string.Equals(candidate.ProviderName, effectiveOptions.ProviderName, StringComparison.OrdinalIgnoreCase));
-
-        if (provider is null)
+        if (!_providers.TryGetValue(effectiveOptions.ProviderName, out var provider))
         {
             throw new InvalidOperationException(
                 $"No RAG driver provider is registered for '{effectiveOptions.ProviderName}'.");
         }
 
-        return provider.Create(effectiveOptions, _serviceProvider);
+        return provider.Create(effectiveOptions);
     }
 }

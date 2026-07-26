@@ -1,2 +1,0 @@
-[    1323ms] [INFO] [2026-05-13T19:14:31.621Z] Information: Normalizing '_blazor' to 'http://localhost:5046/_blazor'. @ http://localhost:5046/_framework/blazor.web.qcnkhbt5lj.js:0
-[    1357ms] [INFO] [2026-05-13T19:14:31.656Z] Information: WebSocket connected to ws://localhost:5046/_blazor?id=CCTshnmTy9jvmcrzfTKFKQ. @ http://localhost:5046/_framework/blazor.web.qcnkhbt5lj.js:0

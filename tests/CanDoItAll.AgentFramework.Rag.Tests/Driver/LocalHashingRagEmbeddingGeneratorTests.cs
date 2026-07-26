@@ -12,7 +12,9 @@ public sealed class LocalHashingRagEmbeddingGeneratorTests
             Dimension = 12
         });
 
-        var embedding = await generator.GenerateAsync(new RagEmbeddingRequest("Store invoice approval knowledge."));
+        var embedding = await generator.GenerateAsync(
+            new RagEmbeddingRequest("Store invoice approval knowledge."),
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(12, embedding.Dimension);
         Assert.Equal(LocalHashingRagEmbeddingGenerator.ProviderName, embedding.ProviderName);
@@ -27,8 +29,12 @@ public sealed class LocalHashingRagEmbeddingGeneratorTests
             Dimension = 16
         });
 
-        var first = await generator.GenerateAsync(new RagEmbeddingRequest("Qdrant stores knowledge vectors."));
-        var second = await generator.GenerateAsync(new RagEmbeddingRequest("Qdrant stores knowledge vectors."));
+        var first = await generator.GenerateAsync(
+            new RagEmbeddingRequest("Qdrant stores knowledge vectors."),
+            TestContext.Current.CancellationToken);
+        var second = await generator.GenerateAsync(
+            new RagEmbeddingRequest("Qdrant stores knowledge vectors."),
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(first.Vector, second.Vector);
     }
@@ -41,7 +47,9 @@ public sealed class LocalHashingRagEmbeddingGeneratorTests
             Dimension = 16
         });
 
-        var embedding = await generator.GenerateAsync(new RagEmbeddingRequest("short text", Dimensions: 8));
+        var embedding = await generator.GenerateAsync(
+            new RagEmbeddingRequest("short text", Dimensions: 8),
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(8, embedding.Dimension);
     }

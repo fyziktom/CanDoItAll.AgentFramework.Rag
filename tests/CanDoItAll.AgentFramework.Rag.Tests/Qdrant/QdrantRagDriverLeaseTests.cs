@@ -29,7 +29,7 @@ public sealed class QdrantRagDriverLeaseTests
             collection,
             embeddings);
 
-        Assert.Equal(RagDriverProviderNames.Qdrant, lease.Driver.ProviderName);
+        Assert.Equal(QdrantRagDriver.ProviderIdentifier, lease.Driver.ProviderName);
         Assert.Equal(collection, lease.Driver.DefaultCollection);
         Assert.True(lease.Driver.Capabilities.SupportsFilters);
         Assert.True(lease.Driver.Capabilities.SupportsPayloadIndexes);

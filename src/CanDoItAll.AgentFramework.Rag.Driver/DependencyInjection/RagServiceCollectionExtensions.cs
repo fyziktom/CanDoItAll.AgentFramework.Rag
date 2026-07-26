@@ -11,18 +11,28 @@ public static class RagServiceCollectionExtensions
 {
     public static IServiceCollection AddRagDriverCore(
         this IServiceCollection services,
-        Action<RagDriverFactoryOptions>? configureFactory = null,
-        Action<LocalHashingRagEmbeddingOptions>? configureEmbedding = null)
+        Action<RagDriverFactoryOptions>? configureFactory = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddOptions<RagDriverFactoryOptions>();
-        services.AddOptions<LocalHashingRagEmbeddingOptions>();
 
         if (configureFactory is not null)
         {
             services.Configure(configureFactory);
         }
+
+        services.TryAddSingleton<IRagDriverFactory, RagDriverFactory>();
+        return services;
+    }
+
+    public static IServiceCollection AddLocalHashingRagEmbeddingGenerator(
+        this IServiceCollection services,
+        Action<LocalHashingRagEmbeddingOptions>? configureEmbedding = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddOptions<LocalHashingRagEmbeddingOptions>();
 
         if (configureEmbedding is not null)
         {
@@ -32,7 +42,6 @@ public static class RagServiceCollectionExtensions
         services.TryAddSingleton<IRagEmbeddingGenerator>(serviceProvider =>
             new LocalHashingRagEmbeddingGenerator(
                 serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<LocalHashingRagEmbeddingOptions>>()));
-        services.TryAddSingleton<IRagDriverFactory, RagDriverFactory>();
         return services;
     }
 }

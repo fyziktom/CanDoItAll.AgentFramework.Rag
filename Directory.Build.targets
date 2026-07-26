@@ -1,0 +1,23 @@
+<Project>
+  <PropertyGroup Condition="'$(IsPackable)' == 'true' and '$(PackageLicenseExpression)' == '' and '$(PackageLicenseFile)' == ''">
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <_UseRepositoryPackageLicense>true</_UseRepositoryPackageLicense>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(_UseRepositoryPackageLicense)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)LICENSE"
+          Pack="true"
+          PackagePath="\"
+          Link="LICENSE" />
+  </ItemGroup>
+  <PropertyGroup Condition="'$(IsPackable)' == 'true' and '$(PackageIcon)' == '' and Exists('$(MSBuildThisFileDirectory)docs\package-icon.png')">
+    <PackageIcon>package-icon.png</PackageIcon>
+    <_UseRepositoryPackageIcon>true</_UseRepositoryPackageIcon>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(_UseRepositoryPackageIcon)' == 'true'">
+    <None Remove="$(MSBuildThisFileDirectory)docs\package-icon.png" />
+    <None Include="$(MSBuildThisFileDirectory)docs\package-icon.png"
+          Pack="true"
+          PackagePath="\"
+          Link="package-icon.png" />
+  </ItemGroup>
+</Project>

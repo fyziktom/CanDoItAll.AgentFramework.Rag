@@ -1,134 +1,21 @@
 html,
 body {
     min-height: 100%;
-    background: #f8fafc;
-    color: #0f172a;
-}
-
-h1:focus {
-    outline: none;
-}
-
-.rag-muted {
-    color: #64748b;
-    font-size: .85rem;
-    line-height: 1.4;
-    overflow-wrap: anywhere;
-}
-
-.rag-tag-strip {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .35rem;
-    min-width: 0;
-}
-
-.rag-data-grid table {
-    min-width: 48rem;
-}
-
-.rag-score-badge {
-    display: inline-flex;
-    min-width: 4.25rem;
-    justify-content: center;
-    border: 1px solid #93c5fd;
-    border-radius: 999px;
-    padding: .2rem .55rem;
-    font-size: .78rem;
-    font-weight: 700;
-    line-height: 1.1;
-    white-space: nowrap;
-}
-
-.rag-score-badge--stored,
-.rag-score-badge--strong {
-    background: #dcfce7;
-    border-color: #86efac;
-    color: #14532d;
-}
-
-.rag-score-badge--weak {
-    background: #fef3c7;
-    border-color: #facc15;
-    color: #713f12;
-}
-
-.rag-collection-rail {
-    max-height: 44rem;
-    overflow: auto;
-}
-
-.rag-rail-item,
-.rag-picker-item {
-    width: 100%;
-    border: 1px solid #dbe3ef;
-    border-radius: .5rem;
-    background: #ffffff;
-    color: #0f172a;
-    text-align: left;
-    transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
-}
-
-.rag-rail-item {
-    display: flex;
-    flex-direction: column;
-    gap: .15rem;
-    padding: .7rem .8rem;
-}
-
-.rag-rail-item:hover,
-.rag-rail-item.is-active,
-.rag-picker-item:hover {
-    border-color: #38bdf8;
-    background: #f0f9ff;
-}
-
-.rag-rail-item.is-active {
-    box-shadow: inset 3px 0 0 #0284c7;
-}
-
-.rag-rail-item__name,
-.rag-picker-item__name {
-    font-weight: 650;
-    overflow-wrap: anywhere;
-}
-
-.rag-rail-item__meta,
-.rag-picker-item__meta {
-    color: #64748b;
-    font-size: .78rem;
-}
-
-.rag-picker-list {
-    max-height: 27rem;
-    overflow: auto;
-}
-
-.rag-picker-item {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    gap: .65rem;
-    align-items: center;
-    padding: .65rem .75rem;
-}
-
-.rag-picker-item.is-selected {
-    background: #f8fafc;
-}
-
-.rag-picker-item__check {
-    display: inline-flex;
-    min-width: 0;
-    align-items: center;
-    gap: .55rem;
+    margin: 0;
 }
 
 .blazor-error-boundary {
-    background: #991b1b;
-    color: white;
+    background: var(--cad-tone-danger-soft-fg, #991b1b);
+    color: var(--cad-color-inverse, white);
     padding: 1rem;
 }
 
 .blazor-error-boundary::after {
     content: "An error has occurred.";
+}
+
+@media (max-width: 767px) {
+    .rag-sandbox-shell {
+        flex-direction: column;
+    }
 }

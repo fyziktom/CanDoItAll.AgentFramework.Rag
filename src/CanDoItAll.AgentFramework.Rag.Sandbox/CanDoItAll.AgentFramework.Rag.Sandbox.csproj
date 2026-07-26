@@ -7,11 +7,15 @@
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     <AssemblyName>CanDoItAll.AgentFramework.Rag.Sandbox</AssemblyName>
     <RootNamespace>CanDoItAll.AgentFramework.Rag.Sandbox</RootNamespace>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="CanDoItAll.Components.BaseLib" Version="0.1.15" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\CanDoItAll.AgentFramework.Rag.Driver\CanDoItAll.AgentFramework.Rag.Driver.csproj" />
-    <ProjectReference Include="..\..\..\CanDoItAll\src\CanDoItAll.Components.BaseLib\CanDoItAll.Components.BaseLib.csproj" />
   </ItemGroup>
 
 </Project>

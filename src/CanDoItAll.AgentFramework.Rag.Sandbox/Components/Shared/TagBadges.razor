@@ -1,0 +1,19 @@
+@if (Tags.Count == 0)
+{
+    <TextBlock TextStyle="TextStyle.Note" Value="No tags" />
+}
+else
+{
+    <Cluster Gap="LayoutGap.Tiny" Wrap="FlexWrap.Wrap">
+        @for (var index = 0; index < Tags.Count; index++)
+        {
+            var tag = Tags[index];
+            <Badge @key="@($"{tag}-{index}")" Text="@tag" Tone="BadgeTone.Info" />
+        }
+    </Cluster>
+}
+
+@code {
+    [Parameter]
+    public IReadOnlyList<string> Tags { get; set; } = Array.Empty<string>();
+}
