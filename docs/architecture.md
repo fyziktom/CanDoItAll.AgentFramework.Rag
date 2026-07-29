@@ -112,7 +112,7 @@ Only these projects produce packages:
 - `CanDoItAll.AgentFramework.Rag.Qdrant`
 
 Each package owns a README beside its project file. Repository-wide build
-targets embed the repository license and approved package icon. The sample,
+targets declare the SPDX MIT license expression and embed the approved package icon. The sample,
 sandbox, and test projects are non-packable. Cross-repository UI dependencies
 come from nuget.org; shipping project files never reference sibling source
 paths.
@@ -133,5 +133,5 @@ paths.
   menu and has one active scroll surface.
 - BaseLib is consumed from nuget.org.
 - Package archives contain the exact requested version, package README,
-  repository license, corporate icon, source metadata, symbols, and XML
+  SPDX MIT metadata, corporate icon, source metadata, symbols, and XML
   documentation.

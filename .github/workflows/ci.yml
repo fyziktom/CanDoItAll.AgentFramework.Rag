@@ -35,13 +35,13 @@ jobs:
 
       - name: Build, test, and validate packages
         shell: pwsh
-        run: ./tools/deployment/nugets/Build-NuGets.ps1 -Configuration Release -NoRestore -Version $env:PACKAGE_VERSION -OutputDirectory artifacts/packages
+        run: ./tools/deployment/nugets/Build-NuGets.ps1 -Configuration Release -NoRestore -Version $env:PACKAGE_VERSION
 
       - name: Upload package proof
         uses: actions/upload-artifact@v4
         with:
           name: rag-packages-${{ env.PACKAGE_VERSION }}
           path: |
-            artifacts/packages/*.nupkg
-            artifacts/packages/*.snupkg
+            artifacts/packages/**/*.nupkg
+            artifacts/packages/**/*.snupkg
           if-no-files-found: error

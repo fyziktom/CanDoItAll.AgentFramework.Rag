@@ -38,14 +38,14 @@ Always pass the intended release version explicitly:
 ```powershell
 ./tools/deployment/nugets/Build-NuGets.ps1 `
   -Configuration Release `
-  -Version 0.2.0 `
-  -OutputDirectory artifacts/packages/0.2.0
+  -Version 0.2.0
 ```
 
-Use a fresh output directory. The tool rejects a destination that already
-contains `.nupkg` or `.snupkg` files so stale artifacts cannot satisfy the
-current validation run. Versions must use normalized SemVer core/prerelease
-syntax without build metadata.
+By default, the tool creates a fresh
+`artifacts/packages/<version>_<timestamp>` directory. It rejects a destination
+that already contains `.nupkg` or `.snupkg` files so stale artifacts cannot
+satisfy the current validation run. Versions must use normalized SemVer
+core/prerelease syntax without build metadata.
 
 The version override is forwarded to restore, build, test, and pack. The
 entry point selects only the Driver and Qdrant projects, creates symbol
@@ -55,8 +55,8 @@ The validation gate proves:
 
 - the exact expected package and symbol-package set;
 - matching package and Driver dependency versions;
-- repository, website, file-license, README, and icon metadata;
-- byte-identical repository license, project README, and approved icon;
+- repository, website, SPDX MIT license, README, and icon metadata;
+- byte-identical project README and approved icon;
 - portable symbols and XML documentation.
 
 The build entry point deliberately does not publish. Publishing is a separate,
@@ -82,13 +82,13 @@ key has been provided through the release environment, publish each validated
 
 ```powershell
 dotnet nuget push `
-  artifacts/packages/0.2.0/CanDoItAll.AgentFramework.Rag.Driver.0.2.0.nupkg `
+  artifacts/packages/0.2.0_20260729-153045123/CanDoItAll.AgentFramework.Rag.Driver.0.2.0.nupkg `
   --source https://api.nuget.org/v3/index.json `
   --api-key $env:NUGET_API_KEY `
   --skip-duplicate
 
 dotnet nuget push `
-  artifacts/packages/0.2.0/CanDoItAll.AgentFramework.Rag.Qdrant.0.2.0.nupkg `
+  artifacts/packages/0.2.0_20260729-153045123/CanDoItAll.AgentFramework.Rag.Qdrant.0.2.0.nupkg `
   --source https://api.nuget.org/v3/index.json `
   --api-key $env:NUGET_API_KEY `
   --skip-duplicate

@@ -20,6 +20,10 @@ Skips restore when the caller guarantees it has completed.
 Overrides the package version without editing committed project files. The
 override is forwarded to restore, build, test, and pack.
 
+.PARAMETER CreateRunDirectory
+Treats an explicitly supplied OutputDirectory as a root and creates a
+versioned, timestamped child below it.
+
 .EXAMPLE
 ./tools/deployment/nugets/Build-NuGets.ps1 -Version 0.2.0
 
@@ -35,7 +39,9 @@ param(
 
     [switch]$NoRestore,
 
-    [string]$Version = ''
+    [string]$Version = '',
+
+    [switch]$CreateRunDirectory
 )
 
 $ErrorActionPreference = 'Stop'
@@ -96,7 +102,7 @@ else {
 
 $outputWasSpecified = -not [string]::IsNullOrWhiteSpace($OutputDirectory)
 if ($outputWasSpecified) {
-    $resolvedOutputDirectory = if ([System.IO.Path]::IsPathRooted($OutputDirectory)) {
+    $outputRoot = if ([System.IO.Path]::IsPathRooted($OutputDirectory)) {
         [System.IO.Path]::GetFullPath($OutputDirectory)
     }
     else {
@@ -104,10 +110,14 @@ if ($outputWasSpecified) {
     }
 }
 else {
+    $outputRoot = Join-Path $repositoryRoot 'artifacts\packages'
+}
+if (-not $outputWasSpecified -or $CreateRunDirectory) {
     $runTimestamp = Get-Date -Format 'yyyyMMdd-HHmmssfff'
-    $resolvedOutputDirectory = Join-Path $repositoryRoot (
-        "artifacts\packages\${effectiveVersion}_$runTimestamp"
-    )
+    $resolvedOutputDirectory = Join-Path $outputRoot "${effectiveVersion}_$runTimestamp"
+}
+else {
+    $resolvedOutputDirectory = $outputRoot
 }
 
 $normalizedRepositoryRoot = $repositoryRoot.TrimEnd(

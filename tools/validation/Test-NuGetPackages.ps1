@@ -44,7 +44,6 @@ $expectedPackages = @(
         RequiredTags = @('CanDoItAll', 'RAG', 'Qdrant')
     }
 )
-$licensePath = Join-Path $repositoryRoot 'LICENSE'
 $iconPath = Join-Path $repositoryRoot 'docs\package-icon.png'
 $failures = [System.Collections.Generic.List[string]]::new()
 $packagePaths = [System.Collections.Generic.List[string]]::new()
@@ -114,7 +113,6 @@ function Test-ExpectedDependencyVersion {
         $ActualVersion -ceq "[$ExpectedMinimumVersion,)"
 }
 
-$expectedLicenseHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $licensePath).Hash
 $expectedIconHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $iconPath).Hash
 $approvedIconHash = '02B338424A63193ECE3E25BC7E15A1E8F382E3E64C6DF80D24279C0C0FDA130E'
 if ($expectedIconHash -cne $approvedIconHash) {
@@ -213,14 +211,6 @@ foreach ($expectedPackage in $expectedPackages) {
 
     $archive = [System.IO.Compression.ZipFile]::OpenRead($packagePath)
     try {
-        $licenseBytes = Get-EntryBytes -Archive $archive -EntryName 'LICENSE'
-        if ($null -eq $licenseBytes) {
-            $failures.Add("$($expectedPackage.Id) does not contain LICENSE.")
-        }
-        elseif ((Get-BytesHash -Bytes $licenseBytes) -cne $expectedLicenseHash) {
-            $failures.Add("$($expectedPackage.Id) contains a LICENSE that differs from the repository file.")
-        }
-
         $iconBytes = Get-EntryBytes -Archive $archive -EntryName 'package-icon.png'
         if ($null -eq $iconBytes) {
             $failures.Add("$($expectedPackage.Id) does not contain package-icon.png.")
@@ -319,9 +309,9 @@ foreach ($expectedPackage in $expectedPackages) {
             }
         }
         if ($null -eq $licenseNode -or
-            $licenseNode.GetAttribute('type') -cne 'file' -or
-            $licenseNode.InnerText -cne 'LICENSE') {
-            $failures.Add("$($expectedPackage.Id) must use <license type=`"file`">LICENSE</license>.")
+            $licenseNode.GetAttribute('type') -cne 'expression' -or
+            $licenseNode.InnerText -cne 'MIT') {
+            $failures.Add("$($expectedPackage.Id) must use <license type=`"expression`">MIT</license>.")
         }
         if ($icon -cne 'package-icon.png') {
             $failures.Add("$($expectedPackage.Id) nuspec icon is '$icon'.")

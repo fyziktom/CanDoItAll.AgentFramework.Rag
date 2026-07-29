@@ -39,5 +39,4 @@ project website is [aicandoitall.com](https://aicandoitall.com).
 
 ## License
 
-This package uses the MIT-Derived License with CanDoItAll Website Link
-Requirement embedded in the package as `LICENSE`.
+This package uses the repository's MIT License.

@@ -6,7 +6,7 @@
 [![RAG Driver version](https://img.shields.io/nuget/v/CanDoItAll.AgentFramework.Rag.Driver.svg?logo=nuget&label=RAG%20Driver)](https://www.nuget.org/packages/CanDoItAll.AgentFramework.Rag.Driver)
 [![RAG Driver downloads](https://img.shields.io/nuget/dt/CanDoItAll.AgentFramework.Rag.Driver.svg?logo=nuget&label=RAG%20Driver%20downloads)](https://www.nuget.org/packages/CanDoItAll.AgentFramework.Rag.Driver)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/download/dotnet/10.0)
-[![License](https://img.shields.io/badge/license-MIT--derived%20with%20website%20link-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Provider-neutral retrieval-augmented generation contracts and a Qdrant
 implementation for CanDoItAll applications.
@@ -198,22 +198,16 @@ Build, test, pack, and validate the two intended packages:
 
 ```powershell
 ./tools/deployment/nugets/Build-NuGets.ps1 `
-  -Version 0.2.0 `
-  -OutputDirectory artifacts/packages/0.2.0
+  -Version 0.2.0
 ```
 
-The script never publishes. See [`docs/publishing.md`](docs/publishing.md) for
+The default output is `artifacts/packages/<version>_<timestamp>`. The script
+never publishes. See [`docs/publishing.md`](docs/publishing.md) for
 the artifact contract and separately authorized nuget.org publishing step.
 
 ## License and contributions
 
-This repository uses the
-[MIT-Derived License with CanDoItAll Website Link Requirement](LICENSE).
-Redistributions of the software or a substantial portion of it in source or
-binary form must include at least one link to
-[aicandoitall.com](https://aicandoitall.com). One such link satisfies the
-added condition for a distribution containing multiple covered CanDoItAll
-libraries.
+This repository uses the [MIT License](LICENSE).
 
 Code contributions are limited to partners approved by the maintainer. See
 [`CONTRIBUTING.md`](CONTRIBUTING.md) and contact the `fyziktom` account on
