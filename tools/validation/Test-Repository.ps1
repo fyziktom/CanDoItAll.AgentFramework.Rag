@@ -163,8 +163,8 @@ $sandboxProjectPath = Join-Path $repositoryRoot (
 $baseLibReference = @($sandboxProject.SelectNodes('/Project/ItemGroup/PackageReference')) |
     Where-Object { $_.Include -ceq 'CanDoItAll.Components.BaseLib' } |
     Select-Object -First 1
-if ($null -eq $baseLibReference -or [string]$baseLibReference.Version -cne '0.1.15') {
-    $failures.Add('Sandbox must consume CanDoItAll.Components.BaseLib 0.1.15 from NuGet.')
+if ($null -eq $baseLibReference -or [string]$baseLibReference.Version -cne '0.1.17') {
+    $failures.Add('Sandbox must consume CanDoItAll.Components.BaseLib 0.1.17 from NuGet.')
 }
 
 $driverProjectText = Get-Content -Raw -LiteralPath (

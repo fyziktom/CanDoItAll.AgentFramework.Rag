@@ -19,10 +19,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install pinned .NET SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
 
@@ -38,7 +38,7 @@ jobs:
         run: ./tools/deployment/nugets/Build-NuGets.ps1 -Configuration Release -NoRestore -Version $env:PACKAGE_VERSION
 
       - name: Upload package proof
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: rag-packages-${{ env.PACKAGE_VERSION }}
           path: |
