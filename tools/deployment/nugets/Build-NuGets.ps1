@@ -50,6 +50,7 @@ Set-StrictMode -Version Latest
 $repositoryRoot = [System.IO.Path]::GetFullPath(
     (Join-Path $PSScriptRoot '..\..\..')
 )
+$globalJsonPath = Join-Path $repositoryRoot 'global.json'
 $solutionPath = Join-Path $repositoryRoot 'CanDoItAll.AgentFramework.Rag.slnx'
 $nugetConfigPath = Join-Path $repositoryRoot 'NuGet.config'
 $directoryBuildPropsPath = Join-Path $repositoryRoot 'Directory.Build.props'
@@ -59,7 +60,29 @@ $packableProjects = @(
     Join-Path $repositoryRoot 'src\CanDoItAll.AgentFramework.Rag.Qdrant\CanDoItAll.AgentFramework.Rag.Qdrant.csproj'
 )
 
+function Invoke-DotNet {
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Arguments,
+
+        [Parameter(Mandatory)]
+        [string]$FailureMessage
+    )
+
+    Push-Location -LiteralPath $repositoryRoot
+    try {
+        & dotnet @Arguments
+        if ($LASTEXITCODE -ne 0) {
+            throw "$FailureMessage Exit code: $LASTEXITCODE."
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 foreach ($requiredPath in @(
+    $globalJsonPath,
     $solutionPath,
     $nugetConfigPath,
     $directoryBuildPropsPath,
@@ -179,10 +202,9 @@ if (-not $NoRestore) {
         '--configfile',
         $nugetConfigPath
     ) + $versionArguments
-    & dotnet @restoreArguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "dotnet restore failed with exit code $LASTEXITCODE."
-    }
+    Invoke-DotNet `
+        -Arguments $restoreArguments `
+        -FailureMessage 'dotnet restore failed.'
 }
 
 $buildArguments = @(
@@ -193,10 +215,9 @@ $buildArguments = @(
     '--no-restore',
     '-p:ContinuousIntegrationBuild=true'
 ) + $versionArguments
-& dotnet @buildArguments
-if ($LASTEXITCODE -ne 0) {
-    throw "dotnet build failed with exit code $LASTEXITCODE."
-}
+Invoke-DotNet `
+    -Arguments $buildArguments `
+    -FailureMessage 'dotnet build failed.'
 
 $testArguments = @(
     'test',
@@ -207,10 +228,9 @@ $testArguments = @(
     '--no-restore',
     '-p:ContinuousIntegrationBuild=true'
 ) + $versionArguments
-& dotnet @testArguments
-if ($LASTEXITCODE -ne 0) {
-    throw "dotnet test failed with exit code $LASTEXITCODE."
-}
+Invoke-DotNet `
+    -Arguments $testArguments `
+    -FailureMessage 'dotnet test failed.'
 
 foreach ($projectPath in $packableProjects) {
     $packArguments = @(
@@ -224,10 +244,9 @@ foreach ($projectPath in $packableProjects) {
         $resolvedOutputDirectory,
         '-p:ContinuousIntegrationBuild=true'
     ) + $versionArguments
-    & dotnet @packArguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "dotnet pack failed for '$(Split-Path $projectPath -Leaf)' with exit code $LASTEXITCODE."
-    }
+    Invoke-DotNet `
+        -Arguments $packArguments `
+        -FailureMessage "dotnet pack failed for '$(Split-Path $projectPath -Leaf)'."
 }
 
 $validation = & $packageValidatorPath `
